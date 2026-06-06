@@ -379,3 +379,29 @@ func TestResponsiveToWindowSize(t *testing.T) {
 		t.Fatalf("toast did not respond to viewport changes, expected max width 15, got %d", w)
 	}
 }
+
+func TestProgressBar(t *testing.T) {
+	m := New(WithProgress(true), WithDefaultDuration(time.Second), WithWidth(100))
+	m, _, _ = m.Push(NewToast("progress test"))
+	
+	if m.progressModel == nil {
+		t.Fatal("expected progress model to be initialized")
+	}
+
+	// Update loop should handle progressTickMsg
+	var cmd tea.Cmd
+	m, cmd = m.Update(progressTickMsg(time.Now()))
+	if cmd == nil {
+		t.Fatal("expected Update to return a command for progressTickMsg")
+	}
+
+	// Manipulate elapsed time
+	// We can use a mock time or just mutate the entry's createdAt
+	m.visible[0].renderedAt = time.Now().Add(-500 * time.Millisecond)
+	
+	view := m.View()
+	// The progress bar may be wrapped or formatted, so we just assert the filled portion is present.
+	if !strings.Contains(view, "────────────────────") {
+		t.Fatalf("expected view to contain progress bar, got: %q", view)
+	}
+}

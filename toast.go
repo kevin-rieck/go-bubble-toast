@@ -6,6 +6,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -62,6 +63,8 @@ type expirationMsg struct {
 	epoch      uint64
 }
 
+type progressTickMsg time.Time
+
 type RenderContext struct {
 	Width     int
 	MaxHeight int
@@ -86,6 +89,8 @@ type Margin struct{ Top, Right, Bottom, Left int }
 type entry struct {
 	toast      Toast
 	generation uint64
+	createdAt  time.Time
+	renderedAt time.Time
 }
 
 type Model struct {
@@ -99,6 +104,7 @@ type Model struct {
 	margin          Margin
 	theme           Theme
 	renderer        Renderer
+	progressModel   *progress.Model
 
 	visible []entry
 	queued  []entry
@@ -150,6 +156,19 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.winW, m.winH = msg.Width, msg.Height
 		return m, nil
+	case progress.FrameMsg:
+		if m.progressModel != nil {
+			progressModel, cmd := m.progressModel.Update(msg)
+			p := progressModel.(progress.Model)
+			m.progressModel = &p
+			return m, cmd
+		}
+		return m, nil
+	case progressTickMsg:
+		if m.progressModel == nil || len(m.visible) == 0 {
+			return m, nil
+		}
+		return m, tickProgress()
 	default:
 		return m, nil
 	}
@@ -189,17 +208,18 @@ func (m Model) Push(t Toast) (Model, ID, tea.Cmd) {
 	}
 	if i := indexOf(m.visible, t.ID); i >= 0 {
 		m.nextGen++
-		m.visible[i] = entry{toast: t, generation: m.nextGen}
+		m.visible[i] = entry{toast: t, generation: m.nextGen, createdAt: m.visible[i].createdAt, renderedAt: time.Now()}
 		return m, t.ID, m.timer(m.visible[i])
 	}
 	if i := indexOf(m.queued, t.ID); i >= 0 {
 		m.nextGen++
-		m.queued[i] = entry{toast: t, generation: m.nextGen}
+		m.queued[i] = entry{toast: t, generation: m.nextGen, createdAt: m.queued[i].createdAt}
 		return m, t.ID, nil
 	}
 	m.nextGen++
-	e := entry{toast: t, generation: m.nextGen}
+	e := entry{toast: t, generation: m.nextGen, createdAt: time.Now()}
 	if len(m.visible) < m.maxVisible {
+		e.renderedAt = time.Now()
 		m.visible = append(m.visible, e)
 		return m, t.ID, m.timer(e)
 	}
@@ -262,6 +282,7 @@ func (m Model) drain() (Model, tea.Cmd) {
 	for len(m.visible) < m.maxVisible && len(m.queued) > 0 {
 		e := m.queued[0]
 		m.queued = m.queued[1:]
+		e.renderedAt = time.Now()
 		m.visible = append(m.visible, e)
 		if cmd := m.timer(e); cmd != nil {
 			cmds = append(cmds, cmd)
@@ -279,7 +300,19 @@ func (m Model) timer(e entry) tea.Cmd {
 		d = m.defaultDuration
 	}
 	epoch := m.epoch
-	return tea.Tick(d, func(time.Time) tea.Msg { return expirationMsg{id: e.toast.ID, generation: e.generation, epoch: epoch} })
+	cmds := []tea.Cmd{
+		tea.Tick(d, func(time.Time) tea.Msg { return expirationMsg{id: e.toast.ID, generation: e.generation, epoch: epoch} }),
+	}
+	if m.progressModel != nil {
+		cmds = append(cmds, tickProgress())
+	}
+	return tea.Batch(cmds...)
+}
+
+func tickProgress() tea.Cmd {
+	return tea.Tick(time.Second/60, func(t time.Time) tea.Msg {
+		return progressTickMsg(t)
+	})
 }
 
 func (m *Model) generateID() ID {
@@ -365,6 +398,20 @@ func WithStyle(kind Kind, style lipgloss.Style) Option {
 	return func(m *Model) { setStyle(&m.theme, kind, style) }
 }
 func WithRenderer(r Renderer) Option { return func(m *Model) { m.renderer = r } }
+func WithProgress(enabled bool) Option { 
+	return func(m *Model) {
+		if enabled {
+			p := progress.New(
+				progress.WithDefaultGradient(),
+				progress.WithoutPercentage(),
+				progress.WithFillCharacters('─', ' '),
+			)
+			m.progressModel = &p
+		} else {
+			m.progressModel = nil
+		}
+	} 
+}
 
 func WithID(id string) ToastOption             { return func(t *Toast) { t.ID = ID(id) } }
 func WithTitle(title string) ToastOption       { return func(t *Toast) { t.Title = title } }

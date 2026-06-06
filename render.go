@@ -2,6 +2,7 @@ package toast
 
 import (
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
@@ -25,7 +26,7 @@ func (m Model) View() string {
 	}
 	parts := make([]string, len(entries))
 	for i, e := range entries {
-		parts[i] = m.renderToast(e.toast, i, len(entries))
+		parts[i] = m.renderToast(e, i, len(entries))
 	}
 	sep := strings.Repeat("\n", m.gap+1)
 	return strings.Join(parts, sep)
@@ -93,7 +94,8 @@ func (m Model) renderEntries() []entry {
 
 func isTop(p Placement) bool { return p == TopLeft || p == TopRight || p == TopCenter }
 
-func (m Model) renderToast(t Toast, index, total int) string {
+func (m Model) renderToast(e entry, index, total int) string {
+	t := e.toast
 	targetWidth := m.width
 	if m.winW > 0 {
 		maxAvailable := m.winW - m.margin.Left - m.margin.Right
@@ -110,7 +112,11 @@ func (m Model) renderToast(t Toast, index, total int) string {
 	if innerWidth < 1 {
 		innerWidth = 1
 	}
-	style = style.Width(innerWidth)
+	styleWidth := targetWidth - style.GetHorizontalBorderSize()
+	if styleWidth < 1 {
+		styleWidth = 1
+	}
+	style = style.Width(styleWidth)
 	ctx := RenderContext{Width: targetWidth, MaxHeight: m.maxHeight, Style: style, Placement: m.placement, Index: index, Total: total}
 	if m.renderer != nil {
 		return m.renderer(t, ctx)
@@ -127,7 +133,31 @@ func (m Model) renderToast(t Toast, index, total int) string {
 			body += t.Message
 		}
 	}
+
 	body = wrap(body, innerWidth)
+
+	if m.progressModel != nil && !t.Persistent {
+		duration := t.Duration
+		if duration == 0 {
+			duration = m.defaultDuration
+		}
+		elapsed := time.Since(e.renderedAt)
+		percent := 1.0 - float64(elapsed)/float64(duration)
+		if percent < 0 {
+			percent = 0
+		} else if percent > 1 {
+			percent = 1
+		}
+		
+		p := *m.progressModel
+		p.Width = innerWidth
+		bar := p.ViewAs(percent)
+		
+		if body != "" {
+			body += "\n"
+		}
+		body += bar
+	}
 
 	if m.maxHeight > 0 {
 		maxInnerHeight := m.maxHeight - style.GetVerticalFrameSize()
