@@ -72,7 +72,7 @@ func (m *model) configureStage() {
 	switch m.stage {
 	case 0:
 		m.label = "Kinds + generated IDs: neutral, info, success, warning, and error Toasts use default styles."
-		m.toasts = toast.New(toast.WithPlacement(toast.TopRight), toast.WithMaxVisible(5), toast.WithWidth(36), toast.WithGap(0))
+		m.toasts = toast.New(toast.WithPlacement(toast.TopRight), toast.WithMaxVisible(5), toast.WithWidth(36), toast.WithGap(0), toast.WithProgress(true))
 	case 1:
 		m.label = "Content: title/message rendering, then pre-rendered Content replacing both."
 		m.toasts = toast.New(toast.WithPlacement(toast.TopRight), toast.WithMaxVisible(2), toast.WithWidth(42), toast.WithMaxHeight(0))
