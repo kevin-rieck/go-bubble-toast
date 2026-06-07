@@ -1,7 +1,7 @@
 # Generated binaries and VHS visual outputs
 artifacts/
 
-# Local visual verification tooling
+# Local VHS capture tooling
 Makefile.tapes
 tapes/
 

@@ -2,6 +2,18 @@
 
 Bubble Toast is a Bubble Tea/Lip Gloss component for transient, non-blocking Toasts in terminal UIs.
 
+## Demo
+
+![Bubble Toast feature showcase](assets/showcase.gif)
+
+### More examples
+
+| Startup Toast | Toast stack | Progress bar |
+| --- | --- | --- |
+| ![Startup Toast](assets/startup.gif) | ![Multiple Toasts](assets/burst.gif) | ![Progress bar Toasts](assets/progress.gif) |
+
+These GIFs were created with [VHS](https://github.com/charmbracelet/vhs).
+
 ## Run the example
 
 ```sh
