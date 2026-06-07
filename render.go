@@ -2,7 +2,6 @@ package toast
 
 import (
 	"strings"
-	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
@@ -137,22 +136,12 @@ func (m Model) renderToast(e entry, index, total int) string {
 	body = wrap(body, innerWidth)
 
 	if m.progressModel != nil && !t.Persistent {
-		duration := t.Duration
-		if duration == 0 {
-			duration = m.defaultDuration
-		}
-		elapsed := time.Since(e.renderedAt)
-		percent := 1.0 - float64(elapsed)/float64(duration)
-		if percent < 0 {
-			percent = 0
-		} else if percent > 1 {
-			percent = 1
-		}
-		
+		percent := m.progressFraction(e)
+
 		p := *m.progressModel
 		p.Width = innerWidth
 		bar := p.ViewAs(percent)
-		
+
 		if body != "" {
 			body += "\n"
 		}

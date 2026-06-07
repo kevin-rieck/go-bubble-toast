@@ -5,8 +5,8 @@ import (
 	"encoding/binary"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/bubbles/progress"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -265,13 +265,8 @@ func (m Model) Queued() []Toast {
 func (m Model) Len() int { return len(m.visible) + len(m.queued) }
 
 func (m Model) expire(msg expirationMsg) (Model, tea.Cmd) {
-	if msg.epoch != m.epoch {
+	if m.isStaleExpiration(msg) {
 		return m, nil
-	}
-	for _, e := range m.visible {
-		if e.toast.ID == msg.id && e.generation != msg.generation {
-			return m, nil
-		}
 	}
 	m.visible = removeMatching(m.visible, msg.id, msg.generation)
 	return m.drain()
@@ -289,30 +284,6 @@ func (m Model) drain() (Model, tea.Cmd) {
 		}
 	}
 	return m, tea.Batch(cmds...)
-}
-
-func (m Model) timer(e entry) tea.Cmd {
-	if e.toast.Persistent {
-		return nil
-	}
-	d := e.toast.Duration
-	if d == 0 {
-		d = m.defaultDuration
-	}
-	epoch := m.epoch
-	cmds := []tea.Cmd{
-		tea.Tick(d, func(time.Time) tea.Msg { return expirationMsg{id: e.toast.ID, generation: e.generation, epoch: epoch} }),
-	}
-	if m.progressModel != nil {
-		cmds = append(cmds, tickProgress())
-	}
-	return tea.Batch(cmds...)
-}
-
-func tickProgress() tea.Cmd {
-	return tea.Tick(time.Second/60, func(t time.Time) tea.Msg {
-		return progressTickMsg(t)
-	})
 }
 
 func (m *Model) generateID() ID {
@@ -398,7 +369,7 @@ func WithStyle(kind Kind, style lipgloss.Style) Option {
 	return func(m *Model) { setStyle(&m.theme, kind, style) }
 }
 func WithRenderer(r Renderer) Option { return func(m *Model) { m.renderer = r } }
-func WithProgress(enabled bool) Option { 
+func WithProgress(enabled bool) Option {
 	return func(m *Model) {
 		if enabled {
 			p := progress.New(
@@ -410,7 +381,7 @@ func WithProgress(enabled bool) Option {
 		} else {
 			m.progressModel = nil
 		}
-	} 
+	}
 }
 
 func WithID(id string) ToastOption             { return func(t *Toast) { t.ID = ID(id) } }
