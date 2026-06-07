@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.2.0 - 2026-06-07
+
+- Added README demo GIFs showing the feature showcase, startup Toast, Toast stack, and progress bar behavior.
+- Added `examples/progress` for Toast lifetime progress bars.
+- Added Toast lifetime helpers and tests.
+- Fixed progress bar wrapping and queued Toast timer synchronization.
+- Updated dependencies.
+
 ## v0.1.0 - 2026-06-06
 
 Initial public release.
