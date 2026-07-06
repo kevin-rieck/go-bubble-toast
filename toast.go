@@ -97,6 +97,7 @@ type entry struct {
 
 type Model struct {
 	defaultDuration time.Duration
+	kindDurations   map[Kind]time.Duration
 	maxVisible      int
 	maxQueued       int
 	placement       Placement
@@ -379,12 +380,25 @@ func (m *Model) normalize() {
 }
 
 func WithDefaultDuration(d time.Duration) Option { return func(m *Model) { m.defaultDuration = d } }
-func WithMaxVisible(n int) Option                { return func(m *Model) { m.maxVisible = n } }
-func WithMaxQueued(n int) Option                 { return func(m *Model) { m.maxQueued = n } }
-func WithPlacement(p Placement) Option           { return func(m *Model) { m.placement = p } }
-func WithWidth(w int) Option                     { return func(m *Model) { m.width = w } }
-func WithMaxHeight(h int) Option                 { return func(m *Model) { m.maxHeight = h } }
-func WithGap(g int) Option                       { return func(m *Model) { m.gap = g } }
+
+// WithKindDuration configures the default Toast Lifetime for a Toast Kind.
+func WithKindDuration(kind Kind, d time.Duration) Option {
+	return func(m *Model) {
+		if d <= 0 {
+			return
+		}
+		if m.kindDurations == nil {
+			m.kindDurations = make(map[Kind]time.Duration)
+		}
+		m.kindDurations[kind] = d
+	}
+}
+func WithMaxVisible(n int) Option      { return func(m *Model) { m.maxVisible = n } }
+func WithMaxQueued(n int) Option       { return func(m *Model) { m.maxQueued = n } }
+func WithPlacement(p Placement) Option { return func(m *Model) { m.placement = p } }
+func WithWidth(w int) Option           { return func(m *Model) { m.width = w } }
+func WithMaxHeight(h int) Option       { return func(m *Model) { m.maxHeight = h } }
+func WithGap(g int) Option             { return func(m *Model) { m.gap = g } }
 func WithOverlayMargin(top, right, bottom, left int) Option {
 	return func(m *Model) { m.margin = Margin{top, right, bottom, left} }
 }
