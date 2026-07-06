@@ -314,6 +314,24 @@ func TestRenderingWrapsWideAndStyledContentWithoutBreakingANSIOrWidth(t *testing
 	}
 }
 
+func TestKindIconsWrapAndTruncateWithinConfiguredSize(t *testing.T) {
+	m := New(WithKindIcons(), WithWidth(8), WithMaxHeight(2), WithStyle(KindWarning, lipgloss.NewStyle()))
+	m, _, _ = m.Push(Warning("long warning message"))
+
+	view := m.View()
+	if !strings.Contains(view, "⚠") {
+		t.Fatalf("expected warning icon to render, got %q", view)
+	}
+	if lipgloss.Height(view) != 2 || !strings.Contains(view, "…") {
+		t.Fatalf("icon Toast should truncate to max height with ellipsis, got %q", view)
+	}
+	for _, line := range strings.Split(view, "\n") {
+		if lipgloss.Width(line) > 8 {
+			t.Fatalf("icon Toast line exceeds width: width=%d line=%q view=%q", lipgloss.Width(line), line, view)
+		}
+	}
+}
+
 func TestMaxHeightTruncatesStyledWideContentWithEllipsisWithoutBreakingUTF8(t *testing.T) {
 	message := lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Render("first\n世界\nthird")
 	m := New(WithWidth(10), WithMaxHeight(2), WithStyle(KindNone, lipgloss.NewStyle()))
