@@ -55,6 +55,8 @@ type Toast struct {
 
 type ShowMsg struct{ Toast Toast }
 type DismissMsg struct{ ID ID }
+type DismissNewestMsg struct{}
+type DismissOldestMsg struct{}
 type DismissAllMsg struct{}
 
 type expirationMsg struct {
@@ -149,6 +151,10 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		return updated, cmd
 	case DismissMsg:
 		return m.Dismiss(string(msg.ID))
+	case DismissNewestMsg:
+		return m.DismissNewest()
+	case DismissOldestMsg:
+		return m.DismissOldest()
 	case DismissAllMsg:
 		return m.DismissAll()
 	case expirationMsg:
@@ -176,6 +182,8 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 
 func Show(t Toast) tea.Cmd      { return func() tea.Msg { return ShowMsg{Toast: t} } }
 func Dismiss(id string) tea.Cmd { return func() tea.Msg { return DismissMsg{ID: ID(id)} } }
+func DismissNewest() tea.Cmd    { return func() tea.Msg { return DismissNewestMsg{} } }
+func DismissOldest() tea.Cmd    { return func() tea.Msg { return DismissOldestMsg{} } }
 func DismissAll() tea.Cmd       { return func() tea.Msg { return DismissAllMsg{} } }
 
 func NewToast(message string, options ...ToastOption) Toast {
@@ -236,6 +244,22 @@ func (m Model) Push(t Toast) (Model, ID, tea.Cmd) {
 func (m Model) Dismiss(id string) (Model, tea.Cmd) {
 	m.visible = removeID(m.visible, ID(id))
 	m.queued = removeID(m.queued, ID(id))
+	return m.drain()
+}
+
+func (m Model) DismissNewest() (Model, tea.Cmd) {
+	if len(m.visible) == 0 {
+		return m, nil
+	}
+	m.visible = m.visible[:len(m.visible)-1]
+	return m.drain()
+}
+
+func (m Model) DismissOldest() (Model, tea.Cmd) {
+	if len(m.visible) == 0 {
+		return m, nil
+	}
+	m.visible = m.visible[1:]
 	return m.drain()
 }
 
