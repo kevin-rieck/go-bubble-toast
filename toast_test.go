@@ -75,6 +75,31 @@ func TestQueueReplacementDismissalAndTimers(t *testing.T) {
 	}
 }
 
+func TestDirectNewestAndOldestDismissalHelpersShareMessageBehavior(t *testing.T) {
+	newMessageModel := New(WithPlacement(TopRight), WithMaxVisible(2))
+	newDirectModel := New(WithPlacement(TopRight), WithMaxVisible(2))
+	oldMessageModel := New(WithPlacement(BottomRight), WithMaxVisible(2))
+	oldDirectModel := New(WithPlacement(BottomRight), WithMaxVisible(2))
+	for _, id := range []string{"old", "new", "queued"} {
+		newMessageModel, _, _ = newMessageModel.Push(NewToast(id, WithID(id)))
+		newDirectModel, _, _ = newDirectModel.Push(NewToast(id, WithID(id)))
+		oldMessageModel, _, _ = oldMessageModel.Push(NewToast(id, WithID(id)))
+		oldDirectModel, _, _ = oldDirectModel.Push(NewToast(id, WithID(id)))
+	}
+
+	newMessageModel, _ = newMessageModel.Update(DismissNewestMsg{})
+	newDirectModel, _ = newDirectModel.DismissNewest()
+	oldMessageModel, _ = oldMessageModel.Update(DismissOldestMsg{})
+	oldDirectModel, _ = oldDirectModel.DismissOldest()
+
+	if got, want := strings.Join(ids(newDirectModel.Visible()), ","), strings.Join(ids(newMessageModel.Visible()), ","); got != want {
+		t.Fatalf("direct DismissNewest should match message behavior, got %s want %s", got, want)
+	}
+	if got, want := strings.Join(ids(oldDirectModel.Visible()), ","), strings.Join(ids(oldMessageModel.Visible()), ","); got != want {
+		t.Fatalf("direct DismissOldest should match message behavior, got %s want %s", got, want)
+	}
+}
+
 func TestPersistentAndQueueLimits(t *testing.T) {
 	m := New(WithMaxVisible(1), WithMaxQueued(0))
 	m, _, cmd := m.Push(NewToast("p", WithID("p"), WithPersistent()))
@@ -383,7 +408,7 @@ func TestResponsiveToWindowSize(t *testing.T) {
 func TestProgressBar(t *testing.T) {
 	m := New(WithProgress(true), WithDefaultDuration(time.Second), WithWidth(100))
 	m, _, _ = m.Push(NewToast("progress test"))
-	
+
 	if m.progressModel == nil {
 		t.Fatal("expected progress model to be initialized")
 	}
@@ -398,7 +423,7 @@ func TestProgressBar(t *testing.T) {
 	// Manipulate elapsed time
 	// We can use a mock time or just mutate the entry's createdAt
 	m.visible[0].renderedAt = time.Now().Add(-500 * time.Millisecond)
-	
+
 	view := m.View()
 	// The progress bar may be wrapped or formatted, so we just assert the filled portion is present.
 	if !strings.Contains(view, "────────────────────") {
