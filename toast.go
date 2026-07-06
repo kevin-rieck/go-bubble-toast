@@ -286,6 +286,28 @@ func (m Model) Queued() []Toast {
 	return out
 }
 
+// VisibleByID returns the visible Toast with the given Toast ID, if present.
+func (m Model) VisibleByID(id string) (Toast, bool) {
+	return findToast(m.visible, ID(id))
+}
+
+// IsVisible reports whether the given Toast ID is currently visible.
+func (m Model) IsVisible(id string) bool {
+	_, ok := m.VisibleByID(id)
+	return ok
+}
+
+// QueuedByID returns the queued Toast with the given Toast ID, if present.
+func (m Model) QueuedByID(id string) (Toast, bool) {
+	return findToast(m.queued, ID(id))
+}
+
+// IsQueued reports whether the given Toast ID is currently queued.
+func (m Model) IsQueued(id string) bool {
+	_, ok := m.QueuedByID(id)
+	return ok
+}
+
 func (m Model) Len() int { return len(m.visible) + len(m.queued) }
 
 func (m Model) expire(msg expirationMsg) (Model, tea.Cmd) {
@@ -323,6 +345,15 @@ func indexOf(entries []entry, id ID) int {
 		}
 	}
 	return -1
+}
+
+func findToast(entries []entry, id ID) (Toast, bool) {
+	for _, e := range entries {
+		if e.toast.ID == id {
+			return e.toast, true
+		}
+	}
+	return Toast{}, false
 }
 
 func removeID(entries []entry, id ID) []entry {
