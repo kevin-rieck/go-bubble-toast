@@ -180,7 +180,13 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	}
 }
 
-func Show(t Toast) tea.Cmd      { return func() tea.Msg { return ShowMsg{Toast: t} } }
+func Show(t Toast) tea.Cmd { return func() tea.Msg { return ShowMsg{Toast: t} } }
+
+// Replace returns a command that updates or replaces the Toast with the given Toast ID.
+func Replace(id string, t Toast) tea.Cmd {
+	t.ID = ID(id)
+	return Show(t)
+}
 func Dismiss(id string) tea.Cmd { return func() tea.Msg { return DismissMsg{ID: ID(id)} } }
 func DismissNewest() tea.Cmd    { return func() tea.Msg { return DismissNewestMsg{} } }
 func DismissOldest() tea.Cmd    { return func() tea.Msg { return DismissOldestMsg{} } }
@@ -208,6 +214,13 @@ func buildToast(message string, kind Kind, options ...ToastOption) Toast {
 		opt(&t)
 	}
 	return t
+}
+
+// Replace updates or replaces the Toast with the given Toast ID.
+func (m Model) Replace(id string, t Toast) (Model, tea.Cmd) {
+	t.ID = ID(id)
+	updated, _, cmd := m.Push(t)
+	return updated, cmd
 }
 
 func (m Model) Push(t Toast) (Model, ID, tea.Cmd) {

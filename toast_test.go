@@ -100,6 +100,24 @@ func TestDirectNewestAndOldestDismissalHelpersShareMessageBehavior(t *testing.T)
 	}
 }
 
+func TestReplaceHelperRestartsVisibleTimerAndIgnoresStaleExpiration(t *testing.T) {
+	m := New(WithDefaultDuration(time.Hour))
+	m, _, _ = m.Push(Info("syncing", WithID("sync-status")))
+	oldExpiration := expirationMsg{id: "sync-status", generation: m.visible[0].generation, epoch: m.epoch}
+
+	var cmd tea.Cmd
+	m, cmd = m.Replace("sync-status", Success("synced"))
+	if cmd == nil {
+		t.Fatal("replacing visible Toast should restart timer")
+	}
+
+	m, _ = m.Update(oldExpiration)
+	visible := m.Visible()
+	if len(visible) != 1 || visible[0].ID != "sync-status" || visible[0].Message != "synced" {
+		t.Fatalf("stale expiration should not dismiss replacement: %#v", visible)
+	}
+}
+
 func TestPersistentAndQueueLimits(t *testing.T) {
 	m := New(WithMaxVisible(1), WithMaxQueued(0))
 	m, _, cmd := m.Push(NewToast("p", WithID("p"), WithPersistent()))
