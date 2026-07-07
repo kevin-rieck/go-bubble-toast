@@ -176,6 +176,10 @@ func (m Model) renderToast(e entry, index, total int) string {
 		body = m.withKindIcon(t.Kind, body)
 	}
 
+	if t.Occurrences > 1 && body != "" {
+		body += " (x" + strconv64(uint64(t.Occurrences)) + ")"
+	}
+
 	body = wrap(body, innerWidth)
 
 	if m.progressModel != nil && !t.Persistent {

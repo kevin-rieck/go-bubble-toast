@@ -54,13 +54,14 @@ const (
 )
 
 type Toast struct {
-	ID         ID
-	Kind       Kind
-	Title      string
-	Message    string
-	Content    string
-	Duration   time.Duration
-	Persistent bool
+	ID          ID
+	Kind        Kind
+	Title       string
+	Message     string
+	Content     string
+	Occurrences int
+	Duration    time.Duration
+	Persistent  bool
 }
 
 type ShowMsg struct{ Toast Toast }
@@ -133,6 +134,7 @@ type Model struct {
 	iconOverrides          map[Kind]bool
 	asciiOnly              bool
 	noColor                bool
+	coalesceDuplicates     bool
 
 	visible []entry
 	queued  []entry
@@ -251,6 +253,19 @@ func (m Model) Replace(id string, t Toast) (Model, tea.Cmd) {
 }
 
 func (m Model) Push(t Toast) (Model, ID, tea.Cmd) {
+	if t.ID == "" && m.coalesceDuplicates {
+		if i := indexOfDuplicate(m.visible, t); i >= 0 {
+			m.nextGen++
+			m.visible[i].toast.Occurrences = nextOccurrenceCount(m.visible[i].toast.Occurrences)
+			m.visible[i].generation = m.nextGen
+			m.visible[i].renderedAt = time.Now()
+			return m, m.visible[i].toast.ID, m.timer(m.visible[i])
+		}
+		if i := indexOfDuplicate(m.queued, t); i >= 0 {
+			m.queued[i].toast.Occurrences = nextOccurrenceCount(m.queued[i].toast.Occurrences)
+			return m, m.queued[i].toast.ID, nil
+		}
+	}
 	if t.ID == "" {
 		t.ID = m.generateID()
 	}
@@ -390,6 +405,22 @@ func indexOf(entries []entry, id ID) int {
 	return -1
 }
 
+func indexOfDuplicate(entries []entry, t Toast) int {
+	for i, e := range entries {
+		if e.toast.Kind == t.Kind && e.toast.Message == t.Message {
+			return i
+		}
+	}
+	return -1
+}
+
+func nextOccurrenceCount(current int) int {
+	if current < 2 {
+		return 2
+	}
+	return current + 1
+}
+
 func findToast(entries []entry, id ID) (Toast, bool) {
 	for _, e := range entries {
 		if e.toast.ID == id {
@@ -468,6 +499,16 @@ func WithKindDuration(kind Kind, d time.Duration) Option {
 }
 func WithMaxVisible(n int) Option { return func(m *Model) { m.maxVisible = n } }
 func WithMaxQueued(n int) Option  { return func(m *Model) { m.maxQueued = n } }
+
+// WithDuplicateCoalescing coalesces duplicate Toasts with matching Toast Kind and message.
+func WithDuplicateCoalescing() Option {
+	return func(m *Model) { m.coalesceDuplicates = true }
+}
+
+// WithoutDuplicateCoalescing disables duplicate Toast coalescing.
+func WithoutDuplicateCoalescing() Option {
+	return func(m *Model) { m.coalesceDuplicates = false }
+}
 
 // WithQueueOverflowPolicy configures which Toast is dropped when the queue is full.
 func WithQueueOverflowPolicy(policy QueueOverflowPolicy) Option {

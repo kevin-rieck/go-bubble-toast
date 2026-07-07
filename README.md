@@ -126,6 +126,17 @@ m := toast.New(toast.WithQueueOverflowPolicy(toast.DropNewestToast))
 Matching Toast ID updates still replace the existing visible or queued Toast and
 do not consume queue capacity.
 
+Apps that emit repeated generated-ID Toasts can opt into duplicate coalescing.
+When enabled, generated-ID Toasts with the same Toast Kind and message merge into
+one visible or queued Toast and render an occurrence count:
+
+```go
+m := toast.New(toast.WithDuplicateCoalescing())
+```
+
+Explicit Toast IDs remain distinct so host apps keep control over configured
+Toast identity.
+
 Bubble Toast also renders a `+N more` indicator for queued Toasts. Apps can
 customize or disable that stack-level affordance:
 

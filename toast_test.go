@@ -432,6 +432,27 @@ func TestMaxHeightTruncatesStyledWideContentWithEllipsisWithoutBreakingUTF8(t *t
 	}
 }
 
+func TestDuplicateCoalescingRestartsVisibleToastLifetime(t *testing.T) {
+	m := New(WithDuplicateCoalescing(), WithDefaultDuration(time.Hour))
+	m, id, _ := m.Push(Warning("connection failed"))
+	oldGeneration := m.visible[0].generation
+
+	m, _, cmd := m.Push(Warning("connection failed"))
+	if cmd == nil {
+		t.Fatal("coalescing a visible Toast should restart its Toast Lifetime")
+	}
+
+	m, _ = m.Update(expirationMsg{id: id, generation: oldGeneration, epoch: m.epoch})
+	if m.Len() != 1 {
+		t.Fatalf("stale expiration from before coalescing should not dismiss Toast, len=%d", m.Len())
+	}
+
+	m, _ = m.Update(expirationMsg{id: id, generation: m.visible[0].generation, epoch: m.epoch})
+	if m.Len() != 0 {
+		t.Fatalf("current expiration should dismiss coalesced Toast, len=%d", m.Len())
+	}
+}
+
 func TestExpirationRemovesCurrentGenerationAndDrainsQueue(t *testing.T) {
 	m := New(WithMaxVisible(1), WithDefaultDuration(time.Hour))
 	m, _, _ = m.Push(NewToast("one", WithID("one")))

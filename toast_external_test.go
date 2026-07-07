@@ -351,6 +351,72 @@ func TestASCIIOnlyRenderingUsesASCIIAffordances(t *testing.T) {
 	}
 }
 
+func TestDuplicateToastCoalescingShowsOccurrenceCount(t *testing.T) {
+	model := toast.New(
+		toast.WithDuplicateCoalescing(),
+		toast.WithStyle(toast.KindWarning, lipgloss.NewStyle()),
+	)
+	model, _, _ = model.Push(toast.Warning("connection failed"))
+	model, _, _ = model.Push(toast.Warning("connection failed"))
+	model, _, _ = model.Push(toast.Warning("connection failed"))
+
+	if model.Len() != 1 {
+		t.Fatalf("duplicate Toasts should coalesce into one Toast, len=%d", model.Len())
+	}
+	view := model.View()
+	if !strings.Contains(view, "connection failed") || !strings.Contains(view, "(x3)") {
+		t.Fatalf("coalesced Toast should render message and occurrence count, got %q", view)
+	}
+}
+
+func TestDuplicateToastCoalescingMergesQueuedToasts(t *testing.T) {
+	model := toast.New(
+		toast.WithDuplicateCoalescing(),
+		toast.WithMaxVisible(1),
+		toast.WithStyle(toast.KindNone, lipgloss.NewStyle()),
+		toast.WithWidth(30),
+		toast.WithMaxHeight(0),
+	)
+	model, _, _ = model.Push(toast.NewToast("visible"))
+	model, _, _ = model.Push(toast.NewToast("retrying"))
+	model, _, _ = model.Push(toast.NewToast("retrying"))
+
+	queued := model.Queued()
+	if len(queued) != 1 {
+		t.Fatalf("duplicate queued Toasts should coalesce into one queued Toast, queued=%#v", queued)
+	}
+	model, _ = model.Dismiss(string(model.Visible()[0].ID))
+	if view := model.View(); !strings.Contains(view, "retrying") || !strings.Contains(view, "(x2)") {
+		t.Fatalf("coalesced queued Toast should render occurrence count when visible, got %q", view)
+	}
+}
+
+func TestDuplicateToastCoalescingKeepsDistinctKindsAndDefaultBehavior(t *testing.T) {
+	plain := toast.New(toast.WithStyle(toast.KindNone, lipgloss.NewStyle()))
+	plain, _, _ = plain.Push(toast.NewToast("same"))
+	plain, _, _ = plain.Push(toast.NewToast("same"))
+	if plain.Len() != 2 {
+		t.Fatalf("duplicate Toasts should remain distinct unless coalescing is enabled, len=%d", plain.Len())
+	}
+
+	coalescing := toast.New(toast.WithDuplicateCoalescing(), toast.WithMaxVisible(2))
+	coalescing, _, _ = coalescing.Push(toast.Warning("same"))
+	coalescing, _, _ = coalescing.Push(toast.Error("same"))
+	if coalescing.Len() != 2 {
+		t.Fatalf("Toasts with different Toast Kinds should remain distinct, len=%d", coalescing.Len())
+	}
+}
+
+func TestDuplicateToastCoalescingKeepsExplicitToastIDsDistinct(t *testing.T) {
+	model := toast.New(toast.WithDuplicateCoalescing(), toast.WithMaxVisible(2))
+	model, _, _ = model.Push(toast.Warning("same", toast.WithID("first")))
+	model, _, _ = model.Push(toast.Warning("same", toast.WithID("second")))
+
+	if model.Len() != 2 || !model.IsVisible("first") || !model.IsVisible("second") {
+		t.Fatalf("explicit Toast IDs should keep matching messages distinct, visible=%#v", model.Visible())
+	}
+}
+
 func TestQueueIndicatorShowsQueuedCountAndDisappearsAsQueueDrains(t *testing.T) {
 	model := toast.New(
 		toast.WithMaxVisible(1),
