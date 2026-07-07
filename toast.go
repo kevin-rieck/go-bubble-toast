@@ -78,6 +78,13 @@ type RenderContext struct {
 
 type Renderer func(Toast, RenderContext) string
 
+type QueueIndicatorContext struct {
+	Count     int
+	Placement Placement
+}
+
+type QueueIndicatorRenderer func(QueueIndicatorContext) string
+
 type Theme struct {
 	None    lipgloss.Style
 	Info    lipgloss.Style
@@ -96,20 +103,22 @@ type entry struct {
 }
 
 type Model struct {
-	defaultDuration time.Duration
-	kindDurations   map[Kind]time.Duration
-	maxVisible      int
-	maxQueued       int
-	placement       Placement
-	width           int
-	maxHeight       int
-	gap             int
-	margin          Margin
-	theme           Theme
-	renderer        Renderer
-	progressModel   *progress.Model
-	iconsEnabled    bool
-	kindIcons       map[Kind]string
+	defaultDuration        time.Duration
+	kindDurations          map[Kind]time.Duration
+	maxVisible             int
+	maxQueued              int
+	placement              Placement
+	width                  int
+	maxHeight              int
+	gap                    int
+	margin                 Margin
+	theme                  Theme
+	renderer               Renderer
+	queueIndicatorRenderer QueueIndicatorRenderer
+	queueIndicatorEnabled  bool
+	progressModel          *progress.Model
+	iconsEnabled           bool
+	kindIcons              map[Kind]string
 
 	visible []entry
 	queued  []entry
@@ -125,18 +134,19 @@ type ToastOption func(*Toast)
 
 func New(options ...Option) Model {
 	m := Model{
-		defaultDuration: defaultDuration,
-		maxVisible:      defaultMaxVisible,
-		maxQueued:       defaultMaxQueued,
-		placement:       TopRight,
-		width:           defaultWidth,
-		maxHeight:       defaultMaxHeight,
-		gap:             defaultGap,
-		margin:          Margin{defaultMargin, defaultMargin, defaultMargin, defaultMargin},
-		theme:           DefaultTheme(),
-		nextID:          1,
-		nextGen:         1,
-		epoch:           newEpoch(),
+		defaultDuration:       defaultDuration,
+		maxVisible:            defaultMaxVisible,
+		maxQueued:             defaultMaxQueued,
+		placement:             TopRight,
+		width:                 defaultWidth,
+		maxHeight:             defaultMaxHeight,
+		gap:                   defaultGap,
+		margin:                Margin{defaultMargin, defaultMargin, defaultMargin, defaultMargin},
+		theme:                 DefaultTheme(),
+		queueIndicatorEnabled: true,
+		nextID:                1,
+		nextGen:               1,
+		epoch:                 newEpoch(),
 	}
 	for _, opt := range options {
 		opt(&m)
@@ -453,6 +463,20 @@ func WithStyle(kind Kind, style lipgloss.Style) Option {
 	return func(m *Model) { setStyle(&m.theme, kind, style) }
 }
 func WithRenderer(r Renderer) Option { return func(m *Model) { m.renderer = r } }
+
+// WithQueueIndicator customizes the affordance shown when Toasts are queued.
+func WithQueueIndicator(r QueueIndicatorRenderer) Option {
+	return func(m *Model) {
+		m.queueIndicatorEnabled = true
+		m.queueIndicatorRenderer = r
+	}
+}
+
+// WithoutQueueIndicator disables the affordance shown when Toasts are queued.
+func WithoutQueueIndicator() Option {
+	return func(m *Model) { m.queueIndicatorEnabled = false }
+}
+
 func WithProgress(enabled bool) Option {
 	return func(m *Model) {
 		if enabled {

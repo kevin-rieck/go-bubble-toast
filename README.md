@@ -97,6 +97,21 @@ m := toast.New(toast.WithoutIcons())
 Icons are added to Toasts rendered from title/message fields. `WithContent`
 remains pre-rendered content and is not modified.
 
+## Queue indicator
+
+When the visible Toast Stack is full, Bubble Toast renders a `+N more` indicator
+for queued Toasts. Apps can customize or disable that stack-level affordance:
+
+```go
+m := toast.New(
+    toast.WithQueueIndicator(func(ctx toast.QueueIndicatorContext) string {
+        return fmt.Sprintf("waiting: %d", ctx.Count)
+    }),
+)
+
+m = toast.New(toast.WithoutQueueIndicator())
+```
+
 ## Release
 
 See [CHANGELOG.md](CHANGELOG.md) for release notes.

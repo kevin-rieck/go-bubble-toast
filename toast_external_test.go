@@ -1,6 +1,7 @@
 package toast_test
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
@@ -252,6 +253,81 @@ func TestKindIconsDoNotChangePreRenderedContent(t *testing.T) {
 		if strings.Contains(view, notWant) {
 			t.Fatalf("pre-rendered content should not include %q, got %q", notWant, view)
 		}
+	}
+}
+
+func TestQueueIndicatorShowsQueuedCountAndDisappearsAsQueueDrains(t *testing.T) {
+	model := toast.New(
+		toast.WithMaxVisible(1),
+		toast.WithMaxQueued(3),
+		toast.WithStyle(toast.KindNone, lipgloss.NewStyle()),
+		toast.WithWidth(20),
+		toast.WithMaxHeight(0),
+		toast.WithGap(0),
+	)
+	model, _, _ = model.Push(toast.NewToast("visible", toast.WithID("visible")))
+	model, _, _ = model.Push(toast.NewToast("first queued", toast.WithID("first")))
+	model, _, _ = model.Push(toast.NewToast("second queued", toast.WithID("second")))
+
+	if view := model.View(); !strings.Contains(view, "+2 more") {
+		t.Fatalf("expected queued Toast count in rendered stack, got %q", view)
+	}
+
+	model, _ = model.Dismiss("visible")
+	if view := model.View(); !strings.Contains(view, "+1 more") {
+		t.Fatalf("expected queued Toast count to update after drain, got %q", view)
+	}
+
+	model, _ = model.Dismiss("first")
+	if view := model.View(); strings.Contains(view, "more") {
+		t.Fatalf("expected queue indicator to disappear when queue drains, got %q", view)
+	}
+}
+
+func TestQueueIndicatorPlacementCustomizationAndDisable(t *testing.T) {
+	pushQueued := func(model toast.Model) toast.Model {
+		model, _, _ = model.Push(toast.NewToast("visible", toast.WithID("visible")))
+		model, _, _ = model.Push(toast.NewToast("queued", toast.WithID("queued")))
+		return model
+	}
+
+	top := pushQueued(toast.New(
+		toast.WithPlacement(toast.TopRight),
+		toast.WithMaxVisible(1),
+		toast.WithStyle(toast.KindNone, lipgloss.NewStyle()),
+		toast.WithWidth(20),
+		toast.WithMaxHeight(0),
+		toast.WithGap(0),
+	))
+	if lines := strings.Split(top.View(), "\n"); lines[len(lines)-1] != "+1 more" {
+		t.Fatalf("top placement should render queue indicator below Toast Stack, got %q", top.View())
+	}
+
+	bottom := pushQueued(toast.New(
+		toast.WithPlacement(toast.BottomRight),
+		toast.WithMaxVisible(1),
+		toast.WithStyle(toast.KindNone, lipgloss.NewStyle()),
+		toast.WithWidth(20),
+		toast.WithMaxHeight(0),
+		toast.WithGap(0),
+	))
+	if lines := strings.Split(bottom.View(), "\n"); lines[0] != "+1 more" {
+		t.Fatalf("bottom placement should render queue indicator above Toast Stack, got %q", bottom.View())
+	}
+
+	custom := pushQueued(toast.New(
+		toast.WithMaxVisible(1),
+		toast.WithQueueIndicator(func(ctx toast.QueueIndicatorContext) string {
+			return "waiting: " + strconv.Itoa(ctx.Count)
+		}),
+	))
+	if view := custom.View(); !strings.Contains(view, "waiting: 1") || strings.Contains(view, "+1 more") {
+		t.Fatalf("expected custom queue indicator, got %q", view)
+	}
+
+	disabled := pushQueued(toast.New(toast.WithMaxVisible(1), toast.WithoutQueueIndicator()))
+	if view := disabled.View(); strings.Contains(view, "more") {
+		t.Fatalf("expected disabled queue indicator to be omitted, got %q", view)
 	}
 }
 

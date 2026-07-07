@@ -27,6 +27,13 @@ func (m Model) View() string {
 	for i, e := range entries {
 		parts[i] = m.renderToast(e, i, len(entries))
 	}
+	if indicator := m.renderQueueIndicator(); indicator != "" {
+		if isTop(m.placement) {
+			parts = append(parts, indicator)
+		} else {
+			parts = append([]string{indicator}, parts...)
+		}
+	}
 	sep := strings.Repeat("\n", m.gap+1)
 	return strings.Join(parts, sep)
 }
@@ -161,6 +168,17 @@ func (m Model) renderToast(e entry, index, total int) string {
 		rendered = truncateHeight(rendered, m.maxHeight)
 	}
 	return rendered
+}
+
+func (m Model) renderQueueIndicator() string {
+	if !m.queueIndicatorEnabled || len(m.queued) == 0 {
+		return ""
+	}
+	ctx := QueueIndicatorContext{Count: len(m.queued), Placement: m.placement}
+	if m.queueIndicatorRenderer != nil {
+		return m.queueIndicatorRenderer(ctx)
+	}
+	return "+" + strconv64(uint64(ctx.Count)) + " more"
 }
 
 func (m Model) withKindIcon(kind Kind, body string) string {
