@@ -183,6 +183,65 @@ func TestPublicReplaceHelperUpdatesQueuedToastInPlace(t *testing.T) {
 	}
 }
 
+func TestHighPriorityToastBecomesVisibleWhenStackIsFull(t *testing.T) {
+	model := toast.New(toast.WithMaxVisible(1), toast.WithMaxQueued(2))
+	model, _, _ = model.Push(toast.NewToast("routine", toast.WithID("routine")))
+	model, _, _ = model.Push(toast.NewToast("critical", toast.WithID("critical"), toast.WithPriority(10)))
+
+	if !model.IsVisible("critical") {
+		t.Fatalf("high-priority Toast should be visible promptly, visible=%#v queued=%#v", model.Visible(), model.Queued())
+	}
+	if !model.IsQueued("routine") {
+		t.Fatalf("lower-priority visible Toast should move to queue, visible=%#v queued=%#v", model.Visible(), model.Queued())
+	}
+}
+
+func TestKindPriorityMakesMatchingToastVisibleWhenStackIsFull(t *testing.T) {
+	model := toast.New(toast.WithMaxVisible(1), toast.WithMaxQueued(2), toast.WithKindPriority(toast.KindError, 10))
+	model, _, _ = model.Push(toast.Info("routine", toast.WithID("routine")))
+	model, _, _ = model.Push(toast.Error("critical", toast.WithID("critical")))
+
+	if !model.IsVisible("critical") || !model.IsQueued("routine") {
+		t.Fatalf("kind priority should make matching Toast visible, visible=%#v queued=%#v", model.Visible(), model.Queued())
+	}
+}
+
+func TestPriorityOverflowKeepsHighestPriorityQueuedToasts(t *testing.T) {
+	model := toast.New(toast.WithMaxVisible(1), toast.WithMaxQueued(2))
+	model, _, _ = model.Push(toast.NewToast("visible", toast.WithID("visible"), toast.WithPriority(20)))
+	model, _, _ = model.Push(toast.NewToast("low", toast.WithID("low"), toast.WithPriority(1)))
+	model, _, _ = model.Push(toast.NewToast("medium", toast.WithID("medium"), toast.WithPriority(5)))
+	model, _, _ = model.Push(toast.NewToast("high", toast.WithID("high"), toast.WithPriority(10)))
+
+	if model.IsQueued("low") || !model.IsQueued("medium") || !model.IsQueued("high") {
+		t.Fatalf("priority overflow should keep highest-priority queued Toasts, queued=%#v", model.Queued())
+	}
+}
+
+func TestLowerPriorityOverflowDoesNotDisplaceHigherPriorityQueue(t *testing.T) {
+	model := toast.New(toast.WithMaxVisible(1), toast.WithMaxQueued(2))
+	model, _, _ = model.Push(toast.NewToast("visible", toast.WithID("visible"), toast.WithPriority(20)))
+	model, _, _ = model.Push(toast.NewToast("medium", toast.WithID("medium"), toast.WithPriority(5)))
+	model, _, _ = model.Push(toast.NewToast("high", toast.WithID("high"), toast.WithPriority(10)))
+	model, _, _ = model.Push(toast.NewToast("low", toast.WithID("low"), toast.WithPriority(1)))
+
+	if model.IsQueued("low") || !model.IsQueued("medium") || !model.IsQueued("high") {
+		t.Fatalf("lower-priority overflow should not displace higher-priority queue, queued=%#v", model.Queued())
+	}
+}
+
+func TestPriorityQueueDrainsHighestPriorityFirst(t *testing.T) {
+	model := toast.New(toast.WithMaxVisible(1), toast.WithMaxQueued(3))
+	model, _, _ = model.Push(toast.NewToast("visible", toast.WithID("visible"), toast.WithPriority(20)))
+	model, _, _ = model.Push(toast.NewToast("medium", toast.WithID("medium"), toast.WithPriority(5)))
+	model, _, _ = model.Push(toast.NewToast("high", toast.WithID("high"), toast.WithPriority(10)))
+
+	model, _ = model.Dismiss("visible")
+	if !model.IsVisible("high") {
+		t.Fatalf("priority queue should drain highest-priority Toast first, visible=%#v queued=%#v", model.Visible(), model.Queued())
+	}
+}
+
 func TestQueueOverflowPolicyCanDropNewestIncomingToast(t *testing.T) {
 	model := toast.New(
 		toast.WithMaxVisible(1),

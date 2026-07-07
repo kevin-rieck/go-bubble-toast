@@ -137,6 +137,16 @@ Toast:
 m := toast.New(toast.WithQueueOverflowPolicy(toast.DropNewestToast))
 ```
 
+Toasts can also opt into priority. Priority is `0` by default, preserving FIFO
+behavior. Higher-priority Toasts can become visible ahead of lower-priority
+Toasts and are preferred when the queue is under pressure:
+
+```go
+m := toast.New(toast.WithKindPriority(toast.KindError, 10))
+m, _, _ = m.Push(toast.Error("sync failed"))
+m, _, _ = m.Push(toast.Warning("retrying", toast.WithPriority(5)))
+```
+
 Matching Toast ID updates still replace the existing visible or queued Toast and
 do not consume queue capacity.
 

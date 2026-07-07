@@ -80,6 +80,7 @@ type Toast struct {
 	Message     string
 	Content     string
 	Actions     []ToastAction
+	Priority    int
 	Occurrences int
 	Duration    time.Duration
 	Persistent  bool
@@ -137,6 +138,7 @@ type entry struct {
 type Model struct {
 	defaultDuration        time.Duration
 	kindDurations          map[Kind]time.Duration
+	kindPriorities         map[Kind]int
 	maxVisible             int
 	maxQueued              int
 	placement              Placement
@@ -276,6 +278,7 @@ func (m Model) Replace(id string, t Toast) (Model, tea.Cmd) {
 }
 
 func (m Model) Push(t Toast) (Model, ID, tea.Cmd) {
+	t = m.resolvePriority(t)
 	if t.ID == "" && m.coalesceDuplicates {
 		if i := indexOfDuplicate(m.visible, t); i >= 0 {
 			m.nextGen++
@@ -309,17 +312,35 @@ func (m Model) Push(t Toast) (Model, ID, tea.Cmd) {
 		m.visible = append(m.visible, e)
 		return m, t.ID, m.timer(e)
 	}
+	if i := lowerPriorityVisibleIndex(m.visible, t.Priority); i >= 0 && m.maxQueued != 0 {
+		demoted := m.visible[i]
+		e.renderedAt = time.Now()
+		m.visible[i] = e
+		m = m.queueEntry(demoted)
+		return m, t.ID, m.timer(e)
+	}
+	return m.queueEntry(e), t.ID, nil
+}
+
+func (m Model) queueEntry(e entry) Model {
 	if m.maxQueued == 0 {
-		return m, t.ID, nil
+		return m
 	}
 	if len(m.queued) >= m.maxQueued {
 		if m.queueOverflowPolicy == DropNewestToast {
-			return m, t.ID, nil
+			return m
 		}
-		m.queued = m.queued[1:]
+		if i := lowerPriorityQueuedIndex(m.queued, e.toast.Priority); usesPriority(m.queued, e.toast.Priority) {
+			if i < 0 {
+				return m
+			}
+			m.queued = append(m.queued[:i], m.queued[i+1:]...)
+		} else {
+			m.queued = m.queued[1:]
+		}
 	}
 	m.queued = append(m.queued, e)
-	return m, t.ID, nil
+	return m
 }
 
 func (m Model) Dismiss(id string) (Model, tea.Cmd) {
@@ -415,8 +436,9 @@ func (m Model) expire(msg expirationMsg) (Model, tea.Cmd) {
 func (m Model) drain() (Model, tea.Cmd) {
 	var cmds []tea.Cmd
 	for len(m.visible) < m.maxVisible && len(m.queued) > 0 {
-		e := m.queued[0]
-		m.queued = m.queued[1:]
+		i := nextQueuedIndex(m.queued)
+		e := m.queued[i]
+		m.queued = append(m.queued[:i], m.queued[i+1:]...)
 		e.renderedAt = time.Now()
 		m.visible = append(m.visible, e)
 		if cmd := m.timer(e); cmd != nil {
@@ -439,6 +461,64 @@ func indexOf(entries []entry, id ID) int {
 		}
 	}
 	return -1
+}
+
+func (m Model) resolvePriority(t Toast) Toast {
+	if t.Priority == 0 {
+		t.Priority = m.kindPriorities[t.Kind]
+	}
+	return t
+}
+
+func nextQueuedIndex(entries []entry) int {
+	if !usesPriority(entries, 0) {
+		return 0
+	}
+	highest := 0
+	for i := 1; i < len(entries); i++ {
+		if entries[i].toast.Priority > entries[highest].toast.Priority {
+			highest = i
+		}
+	}
+	return highest
+}
+
+func lowerPriorityVisibleIndex(entries []entry, priority int) int {
+	lowest := -1
+	for i, e := range entries {
+		if e.toast.Priority >= priority {
+			continue
+		}
+		if lowest == -1 || e.toast.Priority < entries[lowest].toast.Priority {
+			lowest = i
+		}
+	}
+	return lowest
+}
+
+func lowerPriorityQueuedIndex(entries []entry, priority int) int {
+	lowest := -1
+	for i, e := range entries {
+		if e.toast.Priority >= priority {
+			continue
+		}
+		if lowest == -1 || e.toast.Priority < entries[lowest].toast.Priority {
+			lowest = i
+		}
+	}
+	return lowest
+}
+
+func usesPriority(entries []entry, priority int) bool {
+	if priority != 0 {
+		return true
+	}
+	for _, e := range entries {
+		if e.toast.Priority != 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func indexOfDuplicate(entries []entry, t Toast) int {
@@ -535,6 +615,16 @@ func WithKindDuration(kind Kind, d time.Duration) Option {
 }
 func WithMaxVisible(n int) Option { return func(m *Model) { m.maxVisible = n } }
 func WithMaxQueued(n int) Option  { return func(m *Model) { m.maxQueued = n } }
+
+// WithKindPriority configures the default priority for a Toast Kind.
+func WithKindPriority(kind Kind, priority int) Option {
+	return func(m *Model) {
+		if m.kindPriorities == nil {
+			m.kindPriorities = make(map[Kind]int)
+		}
+		m.kindPriorities[kind] = priority
+	}
+}
 
 // WithDuplicateCoalescing coalesces duplicate Toasts with matching Toast Kind and message.
 func WithDuplicateCoalescing() Option {
@@ -656,6 +746,7 @@ func WithoutIcons() Option {
 func WithID(id string) ToastOption             { return func(t *Toast) { t.ID = ID(id) } }
 func WithTitle(title string) ToastOption       { return func(t *Toast) { t.Title = title } }
 func WithKind(kind Kind) ToastOption           { return func(t *Toast) { t.Kind = kind } }
+func WithPriority(priority int) ToastOption    { return func(t *Toast) { t.Priority = priority } }
 func WithDuration(d time.Duration) ToastOption { return func(t *Toast) { t.Duration = d } }
 func WithPersistent() ToastOption              { return func(t *Toast) { t.Persistent = true } }
 func WithContent(content string) ToastOption   { return func(t *Toast) { t.Content = content } }
