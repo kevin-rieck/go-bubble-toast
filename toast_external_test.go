@@ -1,9 +1,11 @@
 package toast_test
 
 import (
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/kevin-rieck/go-bubble-toast"
 )
 
@@ -120,6 +122,80 @@ func TestPublicDismissOldestRemovesOldestVisibleBottomToastAndDrainsQueue(t *tes
 	visible := model.Visible()
 	if len(visible) != 2 || visible[0].ID != "new" || visible[1].ID != "queued" {
 		t.Fatalf("oldest Dismissal should remove oldest bottom Toast and drain queue, visible=%#v", visible)
+	}
+}
+
+func TestKindIconsRenderBuiltInToastKindIcons(t *testing.T) {
+	model := toast.New(
+		toast.WithMaxVisible(4),
+		toast.WithKindIcons(),
+		toast.WithStyle(toast.KindInfo, lipgloss.NewStyle()),
+		toast.WithStyle(toast.KindSuccess, lipgloss.NewStyle()),
+		toast.WithStyle(toast.KindWarning, lipgloss.NewStyle()),
+		toast.WithStyle(toast.KindError, lipgloss.NewStyle()),
+	)
+	model, _, _ = model.Push(toast.Info("info"))
+	model, _, _ = model.Push(toast.Success("success"))
+	model, _, _ = model.Push(toast.Warning("warning"))
+	model, _, _ = model.Push(toast.Error("error"))
+
+	view := model.View()
+	for _, want := range []string{"ℹ info", "✓ success", "⚠ warning", "✕ error"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("expected rendered Toast Stack to contain %q, got %q", want, view)
+		}
+	}
+}
+
+func TestKindIconsCanBeOverridden(t *testing.T) {
+	model := toast.New(
+		toast.WithKindIcons(),
+		toast.WithIcon(toast.KindSuccess, "OK"),
+		toast.WithStyle(toast.KindSuccess, lipgloss.NewStyle()),
+	)
+	model, _, _ = model.Push(toast.Success("saved"))
+
+	view := model.View()
+	if !strings.Contains(view, "OK saved") {
+		t.Fatalf("expected overridden success icon in rendered Toast, got %q", view)
+	}
+	if strings.Contains(view, "✓ saved") {
+		t.Fatalf("default success icon should be replaced, got %q", view)
+	}
+}
+
+func TestKindIconsCanBeDisabledGlobally(t *testing.T) {
+	model := toast.New(
+		toast.WithKindIcons(),
+		toast.WithoutIcons(),
+		toast.WithStyle(toast.KindWarning, lipgloss.NewStyle()),
+	)
+	model, _, _ = model.Push(toast.Warning("careful"))
+
+	view := model.View()
+	if strings.Contains(view, "⚠") {
+		t.Fatalf("expected icons to be disabled, got %q", view)
+	}
+	if !strings.Contains(view, "careful") {
+		t.Fatalf("expected Toast message to remain rendered, got %q", view)
+	}
+}
+
+func TestKindIconsDoNotChangePreRenderedContent(t *testing.T) {
+	model := toast.New(
+		toast.WithKindIcons(),
+		toast.WithStyle(toast.KindError, lipgloss.NewStyle()),
+	)
+	model, _, _ = model.Push(toast.Error("ignored", toast.WithTitle("Ignored"), toast.WithContent("custom body")))
+
+	view := model.View()
+	if !strings.Contains(view, "custom body") {
+		t.Fatalf("expected custom content to render, got %q", view)
+	}
+	for _, notWant := range []string{"✕", "ignored", "Ignored"} {
+		if strings.Contains(view, notWant) {
+			t.Fatalf("pre-rendered content should not include %q, got %q", notWant, view)
+		}
 	}
 }
 

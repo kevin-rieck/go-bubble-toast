@@ -108,6 +108,8 @@ type Model struct {
 	theme           Theme
 	renderer        Renderer
 	progressModel   *progress.Model
+	iconsEnabled    bool
+	kindIcons       map[Kind]string
 
 	visible []entry
 	queued  []entry
@@ -451,6 +453,30 @@ func WithProgress(enabled bool) Option {
 			m.progressModel = nil
 		}
 	}
+}
+
+// WithKindIcons enables default accessible icons for built-in Toast Kinds.
+func WithKindIcons() Option {
+	return func(m *Model) {
+		m.iconsEnabled = true
+		m.kindIcons = defaultKindIcons()
+	}
+}
+
+// WithIcon overrides the icon rendered for a Toast Kind and enables icons.
+func WithIcon(kind Kind, icon string) Option {
+	return func(m *Model) {
+		m.iconsEnabled = true
+		if m.kindIcons == nil {
+			m.kindIcons = defaultKindIcons()
+		}
+		m.kindIcons[kind] = icon
+	}
+}
+
+// WithoutIcons disables Toast Kind icon rendering.
+func WithoutIcons() Option {
+	return func(m *Model) { m.iconsEnabled = false }
 }
 
 func WithID(id string) ToastOption             { return func(t *Toast) { t.ID = ID(id) } }
