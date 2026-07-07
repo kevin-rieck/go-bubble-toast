@@ -118,6 +118,69 @@ func TestReplaceHelperRestartsVisibleTimerAndIgnoresStaleExpiration(t *testing.T
 	}
 }
 
+func TestToastLifetimeUsesKindDefaultDuration(t *testing.T) {
+	m := New(
+		WithDefaultDuration(time.Hour),
+		WithKindDuration(KindNone, 15*time.Second),
+		WithKindDuration(KindWarning, 30*time.Second),
+	)
+
+	if got := m.toastDuration(Warning("careful")); got != 30*time.Second {
+		t.Fatalf("warning Toast should use per-kind default duration, got %s", got)
+	}
+	if got := m.toastDuration(NewToast("neutral")); got != 15*time.Second {
+		t.Fatalf("neutral Toast should use per-kind default duration, got %s", got)
+	}
+}
+
+func TestToastLifetimeUsesPerToastDurationBeforeKindDefault(t *testing.T) {
+	m := New(
+		WithDefaultDuration(time.Hour),
+		WithKindDuration(KindWarning, 30*time.Second),
+	)
+
+	toast := Warning("careful", WithDuration(10*time.Second))
+	if got := m.toastDuration(toast); got != 10*time.Second {
+		t.Fatalf("per-Toast duration should win over per-kind default, got %s", got)
+	}
+}
+
+func TestToastLifetimeUsesModelDefaultWhenKindDefaultMissing(t *testing.T) {
+	m := New(
+		WithDefaultDuration(time.Hour),
+		WithKindDuration(KindWarning, 30*time.Second),
+	)
+
+	if got := m.toastDuration(Info("hello")); got != time.Hour {
+		t.Fatalf("Toast without per-kind default should use model default duration, got %s", got)
+	}
+}
+
+func TestVisibleReplacementRestartsTimerWithResolvedKindDuration(t *testing.T) {
+	oldExpirationTick := expirationTick
+	defer func() { expirationTick = oldExpirationTick }()
+
+	var scheduled []time.Duration
+	expirationTick = func(d time.Duration, fn func(time.Time) tea.Msg) tea.Cmd {
+		scheduled = append(scheduled, d)
+		return func() tea.Msg { return fn(time.Now()) }
+	}
+
+	m := New(
+		WithDefaultDuration(time.Hour),
+		WithKindDuration(KindError, 2*time.Second),
+	)
+	m, _, _ = m.Push(Info("starting", WithID("status")))
+	m, _, _ = m.Push(Error("failed", WithID("status")))
+
+	if len(scheduled) != 2 {
+		t.Fatalf("expected initial Toast and visible replacement to schedule timers, got %d", len(scheduled))
+	}
+	if got := scheduled[1]; got != 2*time.Second {
+		t.Fatalf("visible replacement should restart timer with resolved per-kind duration, got %s", got)
+	}
+}
+
 func TestPersistentAndQueueLimits(t *testing.T) {
 	m := New(WithMaxVisible(1), WithMaxQueued(0))
 	m, _, cmd := m.Push(NewToast("p", WithID("p"), WithPersistent()))
@@ -328,6 +391,24 @@ func TestRenderingWrapsWideAndStyledContentWithoutBreakingANSIOrWidth(t *testing
 		}
 		if lipgloss.Width(line) > 12 {
 			t.Fatalf("rendered line exceeds configured width: width=%d line=%q view=%q", lipgloss.Width(line), line, m.View())
+		}
+	}
+}
+
+func TestKindIconsWrapAndTruncateWithinConfiguredSize(t *testing.T) {
+	m := New(WithKindIcons(), WithWidth(8), WithMaxHeight(2), WithStyle(KindWarning, lipgloss.NewStyle()))
+	m, _, _ = m.Push(Warning("long warning message"))
+
+	view := m.View()
+	if !strings.Contains(view, "⚠") {
+		t.Fatalf("expected warning icon to render, got %q", view)
+	}
+	if lipgloss.Height(view) != 2 || !strings.Contains(view, "…") {
+		t.Fatalf("icon Toast should truncate to max height with ellipsis, got %q", view)
+	}
+	for _, line := range strings.Split(view, "\n") {
+		if lipgloss.Width(line) > 8 {
+			t.Fatalf("icon Toast line exceeds width: width=%d line=%q view=%q", lipgloss.Width(line), line, view)
 		}
 	}
 }

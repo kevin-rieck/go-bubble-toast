@@ -1,11 +1,93 @@
 package toast_test
 
 import (
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/kevin-rieck/go-bubble-toast"
+	"github.com/charmbracelet/lipgloss"
+	toast "github.com/kevin-rieck/go-bubble-toast"
 )
+
+func TestAppCanQueryVisibleToastByID(t *testing.T) {
+	model := toast.New()
+	model, _, _ = model.Push(toast.Info("connected", toast.WithID("network")))
+
+	got, ok := model.VisibleByID("network")
+	if !ok {
+		t.Fatal("expected visible Toast to be found by Toast ID")
+	}
+	if got.ID != "network" || got.Message != "connected" {
+		t.Fatalf("unexpected Toast returned: %#v", got)
+	}
+	if !model.IsVisible("network") {
+		t.Fatal("expected Toast ID to be reported visible")
+	}
+}
+
+func TestAppCanQueryQueuedToastByID(t *testing.T) {
+	model := toast.New(toast.WithMaxVisible(1))
+	model, _, _ = model.Push(toast.NewToast("visible", toast.WithID("visible")))
+	model, _, _ = model.Push(toast.Warning("waiting", toast.WithID("queued")))
+
+	got, ok := model.QueuedByID("queued")
+	if !ok {
+		t.Fatal("expected queued Toast to be found by Toast ID")
+	}
+	if got.ID != "queued" || got.Message != "waiting" {
+		t.Fatalf("unexpected Toast returned: %#v", got)
+	}
+	if !model.IsQueued("queued") {
+		t.Fatal("expected Toast ID to be reported queued")
+	}
+	if model.IsVisible("queued") {
+		t.Fatal("queued Toast ID should not be reported visible")
+	}
+}
+
+func TestToastIDQueriesDoNotFindMissingOrDismissedToasts(t *testing.T) {
+	model := toast.New(toast.WithMaxVisible(1))
+	model, _, _ = model.Push(toast.NewToast("visible", toast.WithID("visible")))
+	model, _, _ = model.Push(toast.NewToast("queued", toast.WithID("queued")))
+
+	if _, ok := model.VisibleByID("missing"); ok {
+		t.Fatal("missing Toast ID should not be found in visible Toast Stack")
+	}
+	if _, ok := model.QueuedByID("missing"); ok {
+		t.Fatal("missing Toast ID should not be found in queue")
+	}
+
+	model, _ = model.Dismiss("visible")
+	model, _ = model.Dismiss("queued")
+
+	if model.IsVisible("visible") || model.IsQueued("queued") {
+		t.Fatal("dismissed Toast IDs should not be reported visible or queued")
+	}
+}
+
+func TestToastIDQueriesReturnCopies(t *testing.T) {
+	model := toast.New(toast.WithMaxVisible(1))
+	model, _, _ = model.Push(toast.NewToast("visible", toast.WithID("visible")))
+	model, _, _ = model.Push(toast.NewToast("queued", toast.WithID("queued")))
+
+	visible, ok := model.VisibleByID("visible")
+	if !ok {
+		t.Fatal("expected visible Toast")
+	}
+	visible.Message = "mutated"
+	if got, _ := model.VisibleByID("visible"); got.Message == "mutated" {
+		t.Fatal("VisibleByID should return a copy")
+	}
+
+	queued, ok := model.QueuedByID("queued")
+	if !ok {
+		t.Fatal("expected queued Toast")
+	}
+	queued.Message = "mutated"
+	if got, _ := model.QueuedByID("queued"); got.Message == "mutated" {
+		t.Fatal("QueuedByID should return a copy")
+	}
+}
 
 func TestPublicDismissNewestRemovesNewestVisibleToastAndDrainsQueue(t *testing.T) {
 	model := toast.New(toast.WithPlacement(toast.TopRight), toast.WithMaxVisible(2), toast.WithDefaultDuration(0))
@@ -96,6 +178,80 @@ func TestPublicReplaceHelperUpdatesQueuedToastInPlace(t *testing.T) {
 	}
 	if queued[0].Kind != toast.KindSuccess || queued[0].Message != "updated first queued" {
 		t.Fatalf("queued Toast was not replaced in place: %#v", queued[0])
+	}
+}
+
+func TestKindIconsRenderBuiltInToastKindIcons(t *testing.T) {
+	model := toast.New(
+		toast.WithMaxVisible(4),
+		toast.WithKindIcons(),
+		toast.WithStyle(toast.KindInfo, lipgloss.NewStyle()),
+		toast.WithStyle(toast.KindSuccess, lipgloss.NewStyle()),
+		toast.WithStyle(toast.KindWarning, lipgloss.NewStyle()),
+		toast.WithStyle(toast.KindError, lipgloss.NewStyle()),
+	)
+	model, _, _ = model.Push(toast.Info("info"))
+	model, _, _ = model.Push(toast.Success("success"))
+	model, _, _ = model.Push(toast.Warning("warning"))
+	model, _, _ = model.Push(toast.Error("error"))
+
+	view := model.View()
+	for _, want := range []string{"ℹ info", "✓ success", "⚠ warning", "✕ error"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("expected rendered Toast Stack to contain %q, got %q", want, view)
+		}
+	}
+}
+
+func TestKindIconsCanBeOverridden(t *testing.T) {
+	model := toast.New(
+		toast.WithKindIcons(),
+		toast.WithIcon(toast.KindSuccess, "OK"),
+		toast.WithStyle(toast.KindSuccess, lipgloss.NewStyle()),
+	)
+	model, _, _ = model.Push(toast.Success("saved"))
+
+	view := model.View()
+	if !strings.Contains(view, "OK saved") {
+		t.Fatalf("expected overridden success icon in rendered Toast, got %q", view)
+	}
+	if strings.Contains(view, "✓ saved") {
+		t.Fatalf("default success icon should be replaced, got %q", view)
+	}
+}
+
+func TestKindIconsCanBeDisabledGlobally(t *testing.T) {
+	model := toast.New(
+		toast.WithKindIcons(),
+		toast.WithoutIcons(),
+		toast.WithStyle(toast.KindWarning, lipgloss.NewStyle()),
+	)
+	model, _, _ = model.Push(toast.Warning("careful"))
+
+	view := model.View()
+	if strings.Contains(view, "⚠") {
+		t.Fatalf("expected icons to be disabled, got %q", view)
+	}
+	if !strings.Contains(view, "careful") {
+		t.Fatalf("expected Toast message to remain rendered, got %q", view)
+	}
+}
+
+func TestKindIconsDoNotChangePreRenderedContent(t *testing.T) {
+	model := toast.New(
+		toast.WithKindIcons(),
+		toast.WithStyle(toast.KindError, lipgloss.NewStyle()),
+	)
+	model, _, _ = model.Push(toast.Error("ignored", toast.WithTitle("Ignored"), toast.WithContent("custom body")))
+
+	view := model.View()
+	if !strings.Contains(view, "custom body") {
+		t.Fatalf("expected custom content to render, got %q", view)
+	}
+	for _, notWant := range []string{"✕", "ignored", "Ignored"} {
+		if strings.Contains(view, notWant) {
+			t.Fatalf("pre-rendered content should not include %q, got %q", notWant, view)
+		}
 	}
 }
 

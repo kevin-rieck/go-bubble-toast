@@ -72,6 +72,31 @@ Direct model updates use the same replacement behavior:
 m, cmd = m.Replace(syncStatus, toast.Error("sync failed"))
 ```
 
+## Toast Kind icons
+
+Enable Toast Kind icons when color alone should not communicate Toast intent:
+
+```go
+m := toast.New(toast.WithKindIcons())
+```
+
+Built-in icons are available for info, success, warning, and error Toasts. Apps
+can override icons or disable them globally for terminals and fonts where icons
+are not appropriate:
+
+```go
+m := toast.New(
+    toast.WithKindIcons(),
+    toast.WithIcon(toast.KindSuccess, "OK"),
+)
+
+// Or disable icons globally when terminal/font support is unsuitable.
+m := toast.New(toast.WithoutIcons())
+```
+
+Icons are added to Toasts rendered from title/message fields. `WithContent`
+remains pre-rendered content and is not modified.
+
 ## Release
 
 See [CHANGELOG.md](CHANGELOG.md) for release notes.

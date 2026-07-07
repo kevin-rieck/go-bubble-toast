@@ -6,13 +6,15 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+var expirationTick = tea.Tick
+
 func (m Model) timer(e entry) tea.Cmd {
 	if e.toast.Persistent {
 		return nil
 	}
 	epoch := m.epoch
 	cmds := []tea.Cmd{
-		tea.Tick(m.toastDuration(e.toast), func(time.Time) tea.Msg {
+		expirationTick(m.toastDuration(e.toast), func(time.Time) tea.Msg {
 			return expirationMsg{id: e.toast.ID, generation: e.generation, epoch: epoch}
 		}),
 	}
@@ -25,6 +27,9 @@ func (m Model) timer(e entry) tea.Cmd {
 func (m Model) toastDuration(t Toast) time.Duration {
 	if t.Duration != 0 {
 		return t.Duration
+	}
+	if d := m.kindDurations[t.Kind]; d != 0 {
+		return d
 	}
 	return m.defaultDuration
 }

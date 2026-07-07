@@ -97,6 +97,7 @@ type entry struct {
 
 type Model struct {
 	defaultDuration time.Duration
+	kindDurations   map[Kind]time.Duration
 	maxVisible      int
 	maxQueued       int
 	placement       Placement
@@ -107,6 +108,8 @@ type Model struct {
 	theme           Theme
 	renderer        Renderer
 	progressModel   *progress.Model
+	iconsEnabled    bool
+	kindIcons       map[Kind]string
 
 	visible []entry
 	queued  []entry
@@ -299,6 +302,28 @@ func (m Model) Queued() []Toast {
 	return out
 }
 
+// VisibleByID returns the visible Toast with the given Toast ID, if present.
+func (m Model) VisibleByID(id string) (Toast, bool) {
+	return findToast(m.visible, ID(id))
+}
+
+// IsVisible reports whether the given Toast ID is currently visible.
+func (m Model) IsVisible(id string) bool {
+	_, ok := m.VisibleByID(id)
+	return ok
+}
+
+// QueuedByID returns the queued Toast with the given Toast ID, if present.
+func (m Model) QueuedByID(id string) (Toast, bool) {
+	return findToast(m.queued, ID(id))
+}
+
+// IsQueued reports whether the given Toast ID is currently queued.
+func (m Model) IsQueued(id string) bool {
+	_, ok := m.QueuedByID(id)
+	return ok
+}
+
 func (m Model) Len() int { return len(m.visible) + len(m.queued) }
 
 func (m Model) expire(msg expirationMsg) (Model, tea.Cmd) {
@@ -336,6 +361,15 @@ func indexOf(entries []entry, id ID) int {
 		}
 	}
 	return -1
+}
+
+func findToast(entries []entry, id ID) (Toast, bool) {
+	for _, e := range entries {
+		if e.toast.ID == id {
+			return e.toast, true
+		}
+	}
+	return Toast{}, false
 }
 
 func removeID(entries []entry, id ID) []entry {
@@ -392,12 +426,25 @@ func (m *Model) normalize() {
 }
 
 func WithDefaultDuration(d time.Duration) Option { return func(m *Model) { m.defaultDuration = d } }
-func WithMaxVisible(n int) Option                { return func(m *Model) { m.maxVisible = n } }
-func WithMaxQueued(n int) Option                 { return func(m *Model) { m.maxQueued = n } }
-func WithPlacement(p Placement) Option           { return func(m *Model) { m.placement = p } }
-func WithWidth(w int) Option                     { return func(m *Model) { m.width = w } }
-func WithMaxHeight(h int) Option                 { return func(m *Model) { m.maxHeight = h } }
-func WithGap(g int) Option                       { return func(m *Model) { m.gap = g } }
+
+// WithKindDuration configures the default Toast Lifetime for a Toast Kind.
+func WithKindDuration(kind Kind, d time.Duration) Option {
+	return func(m *Model) {
+		if d <= 0 {
+			return
+		}
+		if m.kindDurations == nil {
+			m.kindDurations = make(map[Kind]time.Duration)
+		}
+		m.kindDurations[kind] = d
+	}
+}
+func WithMaxVisible(n int) Option      { return func(m *Model) { m.maxVisible = n } }
+func WithMaxQueued(n int) Option       { return func(m *Model) { m.maxQueued = n } }
+func WithPlacement(p Placement) Option { return func(m *Model) { m.placement = p } }
+func WithWidth(w int) Option           { return func(m *Model) { m.width = w } }
+func WithMaxHeight(h int) Option       { return func(m *Model) { m.maxHeight = h } }
+func WithGap(g int) Option             { return func(m *Model) { m.gap = g } }
 func WithOverlayMargin(top, right, bottom, left int) Option {
 	return func(m *Model) { m.margin = Margin{top, right, bottom, left} }
 }
@@ -419,6 +466,30 @@ func WithProgress(enabled bool) Option {
 			m.progressModel = nil
 		}
 	}
+}
+
+// WithKindIcons enables default accessible icons for built-in Toast Kinds.
+func WithKindIcons() Option {
+	return func(m *Model) {
+		m.iconsEnabled = true
+		m.kindIcons = defaultKindIcons()
+	}
+}
+
+// WithIcon overrides the icon rendered for a Toast Kind and enables icons.
+func WithIcon(kind Kind, icon string) Option {
+	return func(m *Model) {
+		m.iconsEnabled = true
+		if m.kindIcons == nil {
+			m.kindIcons = defaultKindIcons()
+		}
+		m.kindIcons[kind] = icon
+	}
+}
+
+// WithoutIcons disables Toast Kind icon rendering.
+func WithoutIcons() Option {
+	return func(m *Model) { m.iconsEnabled = false }
 }
 
 func WithID(id string) ToastOption             { return func(t *Toast) { t.ID = ID(id) } }

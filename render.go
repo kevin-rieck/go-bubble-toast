@@ -131,6 +131,7 @@ func (m Model) renderToast(e entry, index, total int) string {
 			}
 			body += t.Message
 		}
+		body = m.withKindIcon(t.Kind, body)
 	}
 
 	body = wrap(body, innerWidth)
@@ -160,6 +161,26 @@ func (m Model) renderToast(e entry, index, total int) string {
 		rendered = truncateHeight(rendered, m.maxHeight)
 	}
 	return rendered
+}
+
+func (m Model) withKindIcon(kind Kind, body string) string {
+	if !m.iconsEnabled || body == "" {
+		return body
+	}
+	icon := m.kindIcons[kind]
+	if icon == "" {
+		return body
+	}
+	return icon + " " + body
+}
+
+func defaultKindIcons() map[Kind]string {
+	return map[Kind]string{
+		KindInfo:    "ℹ",
+		KindSuccess: "✓",
+		KindWarning: "⚠",
+		KindError:   "✕",
+	}
 }
 
 func (m Model) styleFor(kind Kind) lipgloss.Style {
