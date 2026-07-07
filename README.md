@@ -52,6 +52,26 @@ m, id, cmd := m.Push(toast.Success("saved"))
 _, _ = id, cmd
 ```
 
+## Updating a long-running status Toast
+
+Use a stable Toast ID when a status may change over time. `Replace` reuses the
+same Toast ID, so the Toast Stack or queue keeps one entry for that status.
+
+```go
+const syncStatus = "sync-status"
+
+cmd := toast.Replace(syncStatus, toast.Info("syncing", toast.WithPersistent()))
+
+// Later, when the work finishes:
+cmd = toast.Replace(syncStatus, toast.Success("synced"))
+```
+
+Direct model updates use the same replacement behavior:
+
+```go
+m, cmd = m.Replace(syncStatus, toast.Error("sync failed"))
+```
+
 ## Toast Kind icons
 
 Enable Toast Kind icons when color alone should not communicate Toast intent:
