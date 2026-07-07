@@ -216,6 +216,62 @@ func TestQueueOverflowPolicyCanDropNewestIncomingToast(t *testing.T) {
 	}
 }
 
+func TestRendererPresetMinimalRendersToastContentWithoutBorder(t *testing.T) {
+	model := toast.New(toast.WithRendererPreset(toast.PresetMinimal), toast.WithWidth(20))
+	model, _, _ = model.Push(toast.Success("saved", toast.WithTitle("Done")))
+
+	view := model.View()
+	if !strings.Contains(view, "Done") || !strings.Contains(view, "saved") {
+		t.Fatalf("minimal preset should render Toast Content, got %q", view)
+	}
+	for _, border := range []string{"╭", "╮", "╰", "╯", "─", "│"} {
+		if strings.Contains(view, border) {
+			t.Fatalf("minimal preset should avoid bordered presentation, got %q", view)
+		}
+	}
+}
+
+func TestRendererPresetCompactKeepsBorderWithLessPadding(t *testing.T) {
+	model := toast.New(toast.WithRendererPreset(toast.PresetCompact), toast.WithWidth(12), toast.WithMaxHeight(0))
+	model, _, _ = model.Push(toast.Success("saved"))
+
+	view := model.View()
+	if !strings.Contains(view, "│saved") {
+		t.Fatalf("compact preset should reduce padding inside bordered Toast, got %q", view)
+	}
+	if !strings.Contains(view, "╭") || !strings.Contains(view, "╯") {
+		t.Fatalf("compact preset should keep bordered presentation, got %q", view)
+	}
+}
+
+func TestRendererPresetIconRendersKindAffordance(t *testing.T) {
+	model := toast.New(
+		toast.WithRendererPreset(toast.PresetIcon),
+		toast.WithStyle(toast.KindError, lipgloss.NewStyle()),
+	)
+	model, _, _ = model.Push(toast.Error("failed"))
+
+	view := model.View()
+	if !strings.Contains(view, "✕ failed") {
+		t.Fatalf("icon preset should render a Toast Kind affordance, got %q", view)
+	}
+}
+
+func TestRendererPresetDoesNotOverrideCustomRenderer(t *testing.T) {
+	model := toast.New(
+		toast.WithRendererPreset(toast.PresetIcon),
+		toast.WithRenderer(func(t toast.Toast, _ toast.RenderContext) string {
+			return "custom:" + t.Message
+		}),
+	)
+	model, _, _ = model.Push(toast.Error("failed"))
+
+	view := model.View()
+	if view != "custom:failed" {
+		t.Fatalf("custom renderer should take precedence over renderer preset, got %q", view)
+	}
+}
+
 func TestKindIconsRenderBuiltInToastKindIcons(t *testing.T) {
 	model := toast.New(
 		toast.WithMaxVisible(4),

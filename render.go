@@ -50,6 +50,36 @@ func noColorStyle(style lipgloss.Style) lipgloss.Style {
 		UnsetBorderBackground()
 }
 
+func applyRendererPreset(m *Model, preset RendererPreset) {
+	switch preset {
+	case PresetCompact:
+		m.theme = mapThemeStyles(m.theme, func(style lipgloss.Style) lipgloss.Style {
+			return style.Padding(0)
+		})
+	case PresetMinimal:
+		m.theme = mapThemeStyles(m.theme, func(style lipgloss.Style) lipgloss.Style {
+			return style.Border(lipgloss.Border{}).Padding(0)
+		})
+	case PresetIcon:
+		m.iconsEnabled = true
+		if m.asciiOnly {
+			m.kindIcons = asciiKindIcons()
+		} else {
+			m.kindIcons = defaultKindIcons()
+		}
+	}
+}
+
+func mapThemeStyles(theme Theme, fn func(lipgloss.Style) lipgloss.Style) Theme {
+	return Theme{
+		None:    fn(theme.None),
+		Info:    fn(theme.Info),
+		Success: fn(theme.Success),
+		Warning: fn(theme.Warning),
+		Error:   fn(theme.Error),
+	}
+}
+
 func (m Model) View() string {
 	entries := m.renderEntries()
 	if len(entries) == 0 {

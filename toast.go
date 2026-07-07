@@ -53,6 +53,20 @@ const (
 	DropNewestToast
 )
 
+// RendererPreset configures a built-in Toast presentation.
+type RendererPreset int
+
+const (
+	// PresetDefault uses Bubble Toast's default bordered presentation.
+	PresetDefault RendererPreset = iota
+	// PresetCompact renders a bordered Toast with reduced padding.
+	PresetCompact
+	// PresetMinimal renders Toast Content without borders or padding.
+	PresetMinimal
+	// PresetIcon renders built-in Toast Kind icons before Toast Content.
+	PresetIcon
+)
+
 type Toast struct {
 	ID          ID
 	Kind        Kind
@@ -527,6 +541,11 @@ func WithStyle(kind Kind, style lipgloss.Style) Option {
 	return func(m *Model) { setStyle(&m.theme, kind, style) }
 }
 func WithRenderer(r Renderer) Option { return func(m *Model) { m.renderer = r } }
+
+// WithRendererPreset selects a built-in Toast presentation preset.
+func WithRendererPreset(p RendererPreset) Option {
+	return func(m *Model) { applyRendererPreset(m, p) }
+}
 
 // WithQueueIndicator customizes the affordance shown when Toasts are queued.
 func WithQueueIndicator(r QueueIndicatorRenderer) Option {

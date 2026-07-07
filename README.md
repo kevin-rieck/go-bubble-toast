@@ -112,6 +112,20 @@ m := toast.New(
 Host-provided icon overrides and custom renderers remain under the host app's
 control.
 
+## Renderer presets
+
+Built-in renderer presets provide common Toast presentations without replacing
+the custom renderer escape hatch:
+
+```go
+m := toast.New(toast.WithRendererPreset(toast.PresetCompact))
+```
+
+Use `PresetCompact` for dense bordered Toasts, `PresetMinimal` for unboxed Toast
+Content, and `PresetIcon` when Toast Kind should be led by an icon. A custom
+renderer configured with `WithRenderer` still defines the full Toast
+presentation and takes precedence over presets.
+
 ## Queue behavior
 
 When the visible Toast Stack is full, Bubble Toast queues overflow Toasts. The
