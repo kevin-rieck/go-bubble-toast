@@ -548,6 +548,49 @@ func TestQueueIndicatorPlacementCustomizationAndDisable(t *testing.T) {
 	}
 }
 
+func TestKeyboardActionToastRendersUserVisibleHint(t *testing.T) {
+	model := toast.New(toast.WithStyle(toast.KindNone, lipgloss.NewStyle()))
+	model, _, _ = model.Push(toast.NewToast("file deleted", toast.WithAction("u", "undo", nil)))
+
+	view := model.View()
+	if !strings.Contains(view, "file deleted") || !strings.Contains(view, "[u] undo") {
+		t.Fatalf("action Toast should render user-visible key hint, got %q", view)
+	}
+}
+
+func TestKeyboardActionToastTriggersCommandAndDismisses(t *testing.T) {
+	type undoMsg struct{}
+	model := toast.New()
+	model, _, _ = model.Push(toast.NewToast("file deleted", toast.WithID("delete"), toast.WithAction("u", "undo", func() tea.Msg {
+		return undoMsg{}
+	})))
+
+	var cmd tea.Cmd
+	model, cmd = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'u'}})
+	if cmd == nil {
+		t.Fatal("matching Toast action key should return action command")
+	}
+	if _, ok := cmd().(undoMsg); !ok {
+		t.Fatalf("matching Toast action key returned unexpected message %#v", cmd())
+	}
+	if model.IsVisible("delete") {
+		t.Fatal("invoking a Toast action should dismiss that Toast")
+	}
+}
+
+func TestToastWithoutActionsIgnoresKeyMessages(t *testing.T) {
+	model := toast.New()
+	model, _, _ = model.Push(toast.NewToast("plain", toast.WithID("plain")))
+
+	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'u'}})
+	if cmd != nil {
+		t.Fatal("Toast without actions should not return a command for key messages")
+	}
+	if !updated.IsVisible("plain") {
+		t.Fatal("Toast without actions should remain visible after key messages")
+	}
+}
+
 func TestPublicAPIErgonomicsForBubbleTeaApps(t *testing.T) {
 	model := toast.New()
 	msg := toast.Show(toast.Success("saved", toast.WithTitle("Done"), toast.WithID("save-status")))()

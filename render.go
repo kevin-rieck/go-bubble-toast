@@ -209,6 +209,12 @@ func (m Model) renderToast(e entry, index, total int) string {
 	if t.Occurrences > 1 && body != "" {
 		body += " (x" + strconv64(uint64(t.Occurrences)) + ")"
 	}
+	if hints := actionHints(t.Actions); hints != "" {
+		if body != "" {
+			body += "\n"
+		}
+		body += hints
+	}
 
 	body = wrap(body, innerWidth)
 
@@ -248,6 +254,20 @@ func (m Model) renderQueueIndicator() string {
 		return m.queueIndicatorRenderer(ctx)
 	}
 	return "+" + strconv64(uint64(ctx.Count)) + " more"
+}
+
+func actionHints(actions []ToastAction) string {
+	if len(actions) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(actions))
+	for _, action := range actions {
+		if action.Key == "" || action.Label == "" {
+			continue
+		}
+		parts = append(parts, "["+action.Key+"] "+action.Label)
+	}
+	return strings.Join(parts, "  ")
 }
 
 func (m Model) withKindIcon(kind Kind, body string) string {

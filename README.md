@@ -151,6 +151,21 @@ m := toast.New(toast.WithDuplicateCoalescing())
 Explicit Toast IDs remain distinct so host apps keep control over configured
 Toast identity.
 
+## Keyboard action Toasts
+
+Toasts can declare keyboard actions with user-visible hints. Matching key
+messages routed through the Toast model run the action command and dismiss the
+Toast:
+
+```go
+cmd := toast.Show(toast.NewToast(
+    "file deleted",
+    toast.WithAction("u", "undo", func() tea.Msg { return undoDeleteMsg{} }),
+))
+```
+
+Apps without Toast actions continue to ignore key messages.
+
 Bubble Toast also renders a `+N more` indicator for queued Toasts. Apps can
 customize or disable that stack-level affordance:
 

@@ -67,12 +67,19 @@ const (
 	PresetIcon
 )
 
+type ToastAction struct {
+	Key   string
+	Label string
+	Cmd   tea.Cmd
+}
+
 type Toast struct {
 	ID          ID
 	Kind        Kind
 	Title       string
 	Message     string
 	Content     string
+	Actions     []ToastAction
 	Occurrences int
 	Duration    time.Duration
 	Persistent  bool
@@ -200,6 +207,8 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		return m.DismissOldest()
 	case DismissAllMsg:
 		return m.DismissAll()
+	case tea.KeyMsg:
+		return m.invokeAction(msg)
 	case expirationMsg:
 		return m.expire(msg)
 	case tea.WindowSizeMsg:
@@ -338,6 +347,19 @@ func (m Model) DismissOldest() (Model, tea.Cmd) {
 func (m Model) DismissAll() (Model, tea.Cmd) {
 	m.visible = nil
 	m.queued = nil
+	return m, nil
+}
+
+func (m Model) invokeAction(msg tea.KeyMsg) (Model, tea.Cmd) {
+	key := msg.String()
+	for _, e := range m.renderEntries() {
+		for _, action := range e.toast.Actions {
+			if action.Key == key {
+				updated, drainCmd := m.Dismiss(string(e.toast.ID))
+				return updated, tea.Batch(action.Cmd, drainCmd)
+			}
+		}
+	}
 	return m, nil
 }
 
@@ -637,6 +659,13 @@ func WithKind(kind Kind) ToastOption           { return func(t *Toast) { t.Kind 
 func WithDuration(d time.Duration) ToastOption { return func(t *Toast) { t.Duration = d } }
 func WithPersistent() ToastOption              { return func(t *Toast) { t.Persistent = true } }
 func WithContent(content string) ToastOption   { return func(t *Toast) { t.Content = content } }
+
+// WithAction adds a keyboard action hint and command to a Toast.
+func WithAction(key, label string, cmd tea.Cmd) ToastOption {
+	return func(t *Toast) {
+		t.Actions = append(t.Actions, ToastAction{Key: key, Label: label, Cmd: cmd})
+	}
+}
 
 func newEpoch() uint64 {
 	var b [8]byte
