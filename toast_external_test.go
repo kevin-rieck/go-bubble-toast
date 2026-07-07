@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	toast "github.com/kevin-rieck/go-bubble-toast"
+	"github.com/muesli/termenv"
 )
 
 func TestAppCanQueryVisibleToastByID(t *testing.T) {
@@ -285,6 +286,67 @@ func TestKindIconsDoNotChangePreRenderedContent(t *testing.T) {
 	for _, notWant := range []string{"✕", "ignored", "Ignored"} {
 		if strings.Contains(view, notWant) {
 			t.Fatalf("pre-rendered content should not include %q, got %q", notWant, view)
+		}
+	}
+}
+
+func TestASCIIOnlyRenderingKeepsHostIconOverrides(t *testing.T) {
+	model := toast.New(
+		toast.WithKindIcons(),
+		toast.WithIcon(toast.KindSuccess, "OK"),
+		toast.WithASCIIOnly(),
+		toast.WithStyle(toast.KindSuccess, lipgloss.NewStyle()),
+	)
+	model, _, _ = model.Push(toast.Success("saved"))
+
+	view := model.View()
+	if !strings.Contains(view, "OK saved") {
+		t.Fatalf("expected host icon override to remain under host control, got %q", view)
+	}
+	if strings.Contains(view, "v saved") || strings.Contains(view, "✓ saved") {
+		t.Fatalf("ASCII-only mode should not replace host icon override, got %q", view)
+	}
+}
+
+func TestNoColorRenderingAvoidsANSIEscapeSequences(t *testing.T) {
+	previousProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
+
+	model := toast.New(toast.WithNoColor(), toast.WithWidth(18))
+	model, _, _ = model.Push(toast.Error("failed"))
+
+	view := model.View()
+	if strings.Contains(view, "\x1b[") {
+		t.Fatalf("expected no-color built-in rendering to avoid ANSI escape sequences, got %q", view)
+	}
+	if !strings.Contains(view, "failed") {
+		t.Fatalf("expected Toast message to remain rendered, got %q", view)
+	}
+}
+
+func TestASCIIOnlyRenderingUsesASCIIAffordances(t *testing.T) {
+	model := toast.New(
+		toast.WithASCIIOnly(),
+		toast.WithKindIcons(),
+		toast.WithMaxVisible(4),
+		toast.WithWidth(18),
+		toast.WithMaxHeight(0),
+	)
+	model, _, _ = model.Push(toast.Info("info"))
+	model, _, _ = model.Push(toast.Success("saved"))
+	model, _, _ = model.Push(toast.Warning("careful"))
+	model, _, _ = model.Push(toast.Error("failed"))
+
+	view := model.View()
+	for _, want := range []string{"i info", "v saved", "! careful", "x failed"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("expected ASCII-only Toast Stack to contain %q, got %q", want, view)
+		}
+	}
+	for _, notWant := range []string{"ℹ", "✓", "⚠", "✕", "╭", "╮", "╰", "╯", "─", "│"} {
+		if strings.Contains(view, notWant) {
+			t.Fatalf("ASCII-only rendering should avoid %q, got %q", notWant, view)
 		}
 	}
 }

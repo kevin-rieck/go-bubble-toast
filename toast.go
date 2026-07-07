@@ -130,6 +130,9 @@ type Model struct {
 	progressModel          *progress.Model
 	iconsEnabled           bool
 	kindIcons              map[Kind]string
+	iconOverrides          map[Kind]bool
+	asciiOnly              bool
+	noColor                bool
 
 	visible []entry
 	queued  []entry
@@ -516,7 +519,31 @@ func WithProgress(enabled bool) Option {
 func WithKindIcons() Option {
 	return func(m *Model) {
 		m.iconsEnabled = true
-		m.kindIcons = defaultKindIcons()
+		if m.asciiOnly {
+			m.kindIcons = asciiKindIcons()
+		} else {
+			m.kindIcons = defaultKindIcons()
+		}
+	}
+}
+
+// WithNoColor configures built-in rendering affordances to avoid ANSI colors.
+func WithNoColor() Option {
+	return func(m *Model) { m.noColor = true }
+}
+
+// WithASCIIOnly configures built-in rendering affordances to avoid Unicode.
+func WithASCIIOnly() Option {
+	return func(m *Model) {
+		m.asciiOnly = true
+		m.theme = asciiTheme(m.theme)
+		if m.iconsEnabled {
+			icons := asciiKindIcons()
+			for kind := range m.iconOverrides {
+				icons[kind] = m.kindIcons[kind]
+			}
+			m.kindIcons = icons
+		}
 	}
 }
 
@@ -525,8 +552,16 @@ func WithIcon(kind Kind, icon string) Option {
 	return func(m *Model) {
 		m.iconsEnabled = true
 		if m.kindIcons == nil {
-			m.kindIcons = defaultKindIcons()
+			if m.asciiOnly {
+				m.kindIcons = asciiKindIcons()
+			} else {
+				m.kindIcons = defaultKindIcons()
+			}
 		}
+		if m.iconOverrides == nil {
+			m.iconOverrides = make(map[Kind]bool)
+		}
+		m.iconOverrides[kind] = true
 		m.kindIcons[kind] = icon
 	}
 }

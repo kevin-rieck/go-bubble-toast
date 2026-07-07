@@ -18,6 +18,38 @@ func DefaultTheme() Theme {
 	}
 }
 
+func asciiBorder() lipgloss.Border {
+	return lipgloss.Border{
+		Top:         "-",
+		Bottom:      "-",
+		Left:        "|",
+		Right:       "|",
+		TopLeft:     "+",
+		TopRight:    "+",
+		BottomLeft:  "+",
+		BottomRight: "+",
+	}
+}
+
+func asciiTheme(theme Theme) Theme {
+	border := asciiBorder()
+	return Theme{
+		None:    theme.None.Border(border),
+		Info:    theme.Info.Border(border),
+		Success: theme.Success.Border(border),
+		Warning: theme.Warning.Border(border),
+		Error:   theme.Error.Border(border),
+	}
+}
+
+func noColorStyle(style lipgloss.Style) lipgloss.Style {
+	return style.
+		UnsetForeground().
+		UnsetBackground().
+		UnsetBorderForeground().
+		UnsetBorderBackground()
+}
+
 func (m Model) View() string {
 	entries := m.renderEntries()
 	if len(entries) == 0 {
@@ -114,6 +146,9 @@ func (m Model) renderToast(e entry, index, total int) string {
 	}
 
 	style := m.styleFor(t.Kind)
+	if m.noColor {
+		style = noColorStyle(style)
+	}
 	innerWidth := targetWidth - style.GetHorizontalFrameSize()
 	if innerWidth < 1 {
 		innerWidth = 1
@@ -198,6 +233,15 @@ func defaultKindIcons() map[Kind]string {
 		KindSuccess: "✓",
 		KindWarning: "⚠",
 		KindError:   "✕",
+	}
+}
+
+func asciiKindIcons() map[Kind]string {
+	return map[Kind]string{
+		KindInfo:    "i",
+		KindSuccess: "v",
+		KindWarning: "!",
+		KindError:   "x",
 	}
 }
 

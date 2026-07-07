@@ -97,6 +97,21 @@ m := toast.New(toast.WithoutIcons())
 Icons are added to Toasts rendered from title/message fields. `WithContent`
 remains pre-rendered content and is not modified.
 
+## Compatibility rendering
+
+For constrained terminals, enable compatibility modes for built-in Toast
+presentation:
+
+```go
+m := toast.New(
+    toast.WithASCIIOnly(), // ASCII borders and built-in icons
+    toast.WithNoColor(),   // no ANSI color sequences from built-in styles
+)
+```
+
+Host-provided icon overrides and custom renderers remain under the host app's
+control.
+
 ## Queue behavior
 
 When the visible Toast Stack is full, Bubble Toast queues overflow Toasts. The
