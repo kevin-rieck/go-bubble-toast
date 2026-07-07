@@ -68,8 +68,10 @@ are not appropriate:
 m := toast.New(
     toast.WithKindIcons(),
     toast.WithIcon(toast.KindSuccess, "OK"),
-    toast.WithoutIcons(),
 )
+
+// Or disable icons globally when terminal/font support is unsuitable.
+m := toast.New(toast.WithoutIcons())
 ```
 
 Icons are added to Toasts rendered from title/message fields. `WithContent`
