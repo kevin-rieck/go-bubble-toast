@@ -43,6 +43,16 @@ const (
 	BottomCenter
 )
 
+// QueueOverflowPolicy controls what happens when a new Toast arrives while the queue is full.
+type QueueOverflowPolicy int
+
+const (
+	// DropOldestQueuedToast drops the oldest queued Toast and queues the new Toast.
+	DropOldestQueuedToast QueueOverflowPolicy = iota
+	// DropNewestToast drops the new incoming Toast and preserves the existing queue.
+	DropNewestToast
+)
+
 type Toast struct {
 	ID         ID
 	Kind       Kind
@@ -116,6 +126,7 @@ type Model struct {
 	renderer               Renderer
 	queueIndicatorRenderer QueueIndicatorRenderer
 	queueIndicatorEnabled  bool
+	queueOverflowPolicy    QueueOverflowPolicy
 	progressModel          *progress.Model
 	iconsEnabled           bool
 	kindIcons              map[Kind]string
@@ -261,6 +272,9 @@ func (m Model) Push(t Toast) (Model, ID, tea.Cmd) {
 		return m, t.ID, nil
 	}
 	if len(m.queued) >= m.maxQueued {
+		if m.queueOverflowPolicy == DropNewestToast {
+			return m, t.ID, nil
+		}
 		m.queued = m.queued[1:]
 	}
 	m.queued = append(m.queued, e)
@@ -449,8 +463,14 @@ func WithKindDuration(kind Kind, d time.Duration) Option {
 		m.kindDurations[kind] = d
 	}
 }
-func WithMaxVisible(n int) Option      { return func(m *Model) { m.maxVisible = n } }
-func WithMaxQueued(n int) Option       { return func(m *Model) { m.maxQueued = n } }
+func WithMaxVisible(n int) Option { return func(m *Model) { m.maxVisible = n } }
+func WithMaxQueued(n int) Option  { return func(m *Model) { m.maxQueued = n } }
+
+// WithQueueOverflowPolicy configures which Toast is dropped when the queue is full.
+func WithQueueOverflowPolicy(policy QueueOverflowPolicy) Option {
+	return func(m *Model) { m.queueOverflowPolicy = policy }
+}
+
 func WithPlacement(p Placement) Option { return func(m *Model) { m.placement = p } }
 func WithWidth(w int) Option           { return func(m *Model) { m.width = w } }
 func WithMaxHeight(h int) Option       { return func(m *Model) { m.maxHeight = h } }

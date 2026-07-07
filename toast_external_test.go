@@ -182,6 +182,39 @@ func TestPublicReplaceHelperUpdatesQueuedToastInPlace(t *testing.T) {
 	}
 }
 
+func TestQueueOverflowPolicyCanDropNewestIncomingToast(t *testing.T) {
+	model := toast.New(
+		toast.WithMaxVisible(1),
+		toast.WithMaxQueued(2),
+		toast.WithQueueOverflowPolicy(toast.DropNewestToast),
+	)
+	model, _, _ = model.Push(toast.NewToast("visible", toast.WithID("visible")))
+	model, _, _ = model.Push(toast.NewToast("first queued", toast.WithID("first")))
+	model, _, _ = model.Push(toast.NewToast("second queued", toast.WithID("second")))
+
+	model, _, _ = model.Push(toast.NewToast("dropped", toast.WithID("dropped")))
+
+	queued := model.Queued()
+	got := string(queued[0].ID) + "," + string(queued[1].ID)
+	if got != "first,second" {
+		t.Fatalf("DropNewestToast should preserve existing queued Toasts when queue is full, got %s", got)
+	}
+	if model.IsQueued("dropped") {
+		t.Fatal("new incoming Toast should not be queued when DropNewestToast overflows")
+	}
+
+	model, _, _ = model.Push(toast.NewToast("updated second queued", toast.WithID("second")))
+	if got, _ := model.QueuedByID("second"); got.Message != "updated second queued" {
+		t.Fatalf("matching Toast ID update should bypass full queue capacity, got %#v", got)
+	}
+
+	model, _ = model.Dismiss("visible")
+	visible := model.Visible()
+	if len(visible) != 1 || visible[0].ID != "first" {
+		t.Fatalf("queue should drain in FIFO order after DropNewestToast overflow, visible=%#v", visible)
+	}
+}
+
 func TestKindIconsRenderBuiltInToastKindIcons(t *testing.T) {
 	model := toast.New(
 		toast.WithMaxVisible(4),

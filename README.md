@@ -97,10 +97,22 @@ m := toast.New(toast.WithoutIcons())
 Icons are added to Toasts rendered from title/message fields. `WithContent`
 remains pre-rendered content and is not modified.
 
-## Queue indicator
+## Queue behavior
 
-When the visible Toast Stack is full, Bubble Toast renders a `+N more` indicator
-for queued Toasts. Apps can customize or disable that stack-level affordance:
+When the visible Toast Stack is full, Bubble Toast queues overflow Toasts. The
+default full-queue behavior preserves previous releases by dropping the oldest
+queued Toast when a new Toast arrives. Apps can instead drop the newest incoming
+Toast:
+
+```go
+m := toast.New(toast.WithQueueOverflowPolicy(toast.DropNewestToast))
+```
+
+Matching Toast ID updates still replace the existing visible or queued Toast and
+do not consume queue capacity.
+
+Bubble Toast also renders a `+N more` indicator for queued Toasts. Apps can
+customize or disable that stack-level affordance:
 
 ```go
 m := toast.New(
