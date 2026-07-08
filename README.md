@@ -14,13 +14,16 @@ Bubble Toast is a Bubble Tea/Lip Gloss component for transient, non-blocking Toa
 
 These GIFs were created with [VHS](https://github.com/charmbracelet/vhs).
 
-## Run the example
+## Run the examples
 
 ```sh
 go run ./examples/basic
+go run ./examples/ergonomics
 ```
 
-Press `t` to show Toasts and `q` to quit.
+The basic example shows a minimal Toast integration. The ergonomics example shows
+status replacement, keyboard Dismissal, action Toasts, accessible icons,
+compatibility modes, priority, queue indicators, and duplicate coalescing.
 
 ## Basic usage
 
