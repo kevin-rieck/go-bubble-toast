@@ -53,14 +53,38 @@ const (
 	DropNewestToast
 )
 
+// RendererPreset configures a built-in Toast presentation.
+type RendererPreset int
+
+const (
+	// PresetDefault uses Bubble Toast's default bordered presentation.
+	PresetDefault RendererPreset = iota
+	// PresetCompact renders a bordered Toast with reduced padding.
+	PresetCompact
+	// PresetMinimal renders Toast Content without borders or padding.
+	PresetMinimal
+	// PresetIcon renders built-in Toast Kind icons before Toast Content.
+	PresetIcon
+)
+
+type ToastAction struct {
+	Key   string
+	Label string
+	Cmd   tea.Cmd
+}
+
 type Toast struct {
-	ID         ID
-	Kind       Kind
-	Title      string
-	Message    string
-	Content    string
-	Duration   time.Duration
-	Persistent bool
+	ID               ID
+	Kind             Kind
+	Title            string
+	Message          string
+	Content          string
+	Actions          []ToastAction
+	Priority         int
+	Occurrences      int
+	Duration         time.Duration
+	Persistent       bool
+	ProgressDisabled bool
 }
 
 type ShowMsg struct{ Toast Toast }
@@ -115,6 +139,7 @@ type entry struct {
 type Model struct {
 	defaultDuration        time.Duration
 	kindDurations          map[Kind]time.Duration
+	kindPriorities         map[Kind]int
 	maxVisible             int
 	maxQueued              int
 	placement              Placement
@@ -130,6 +155,11 @@ type Model struct {
 	progressModel          *progress.Model
 	iconsEnabled           bool
 	kindIcons              map[Kind]string
+	iconOverrides          map[Kind]bool
+	asciiOnly              bool
+	noColor                bool
+	noAnimation            bool
+	coalesceDuplicates     bool
 
 	visible []entry
 	queued  []entry
@@ -181,13 +211,15 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		return m.DismissOldest()
 	case DismissAllMsg:
 		return m.DismissAll()
+	case tea.KeyMsg:
+		return m.invokeAction(msg)
 	case expirationMsg:
 		return m.expire(msg)
 	case tea.WindowSizeMsg:
 		m.winW, m.winH = msg.Width, msg.Height
 		return m, nil
 	case progress.FrameMsg:
-		if m.progressModel != nil {
+		if m.progressModel != nil && !m.noAnimation {
 			progressModel, cmd := m.progressModel.Update(msg)
 			p := progressModel.(progress.Model)
 			m.progressModel = &p
@@ -195,7 +227,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		}
 		return m, nil
 	case progressTickMsg:
-		if m.progressModel == nil || len(m.visible) == 0 {
+		if m.progressModel == nil || m.noAnimation || len(m.visible) == 0 {
 			return m, nil
 		}
 		return m, tickProgress()
@@ -248,6 +280,20 @@ func (m Model) Replace(id string, t Toast) (Model, tea.Cmd) {
 }
 
 func (m Model) Push(t Toast) (Model, ID, tea.Cmd) {
+	t = m.resolvePriority(t)
+	if t.ID == "" && m.coalesceDuplicates {
+		if i := indexOfDuplicate(m.visible, t); i >= 0 {
+			m.nextGen++
+			m.visible[i].toast.Occurrences = nextOccurrenceCount(m.visible[i].toast.Occurrences)
+			m.visible[i].generation = m.nextGen
+			m.visible[i].renderedAt = time.Now()
+			return m, m.visible[i].toast.ID, m.timer(m.visible[i])
+		}
+		if i := indexOfDuplicate(m.queued, t); i >= 0 {
+			m.queued[i].toast.Occurrences = nextOccurrenceCount(m.queued[i].toast.Occurrences)
+			return m, m.queued[i].toast.ID, nil
+		}
+	}
 	if t.ID == "" {
 		t.ID = m.generateID()
 	}
@@ -268,17 +314,35 @@ func (m Model) Push(t Toast) (Model, ID, tea.Cmd) {
 		m.visible = append(m.visible, e)
 		return m, t.ID, m.timer(e)
 	}
+	if i := lowerPriorityVisibleIndex(m.visible, t.Priority); i >= 0 && m.maxQueued != 0 {
+		demoted := m.visible[i]
+		e.renderedAt = time.Now()
+		m.visible[i] = e
+		m = m.queueEntry(demoted)
+		return m, t.ID, m.timer(e)
+	}
+	return m.queueEntry(e), t.ID, nil
+}
+
+func (m Model) queueEntry(e entry) Model {
 	if m.maxQueued == 0 {
-		return m, t.ID, nil
+		return m
 	}
 	if len(m.queued) >= m.maxQueued {
 		if m.queueOverflowPolicy == DropNewestToast {
-			return m, t.ID, nil
+			return m
 		}
-		m.queued = m.queued[1:]
+		if i := lowerPriorityQueuedIndex(m.queued, e.toast.Priority); usesPriority(m.queued, e.toast.Priority) {
+			if i < 0 {
+				return m
+			}
+			m.queued = append(m.queued[:i], m.queued[i+1:]...)
+		} else {
+			m.queued = m.queued[1:]
+		}
 	}
 	m.queued = append(m.queued, e)
-	return m, t.ID, nil
+	return m
 }
 
 func (m Model) Dismiss(id string) (Model, tea.Cmd) {
@@ -309,6 +373,19 @@ func (m Model) DismissAll() (Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m Model) invokeAction(msg tea.KeyMsg) (Model, tea.Cmd) {
+	key := msg.String()
+	for _, e := range m.renderEntries() {
+		for _, action := range e.toast.Actions {
+			if action.Key == key {
+				updated, drainCmd := m.Dismiss(string(e.toast.ID))
+				return updated, tea.Batch(action.Cmd, drainCmd)
+			}
+		}
+	}
+	return m, nil
+}
+
 func (m Model) Visible() []Toast {
 	entries := m.renderEntries()
 	out := make([]Toast, len(entries))
@@ -326,27 +403,47 @@ func (m Model) Queued() []Toast {
 	return out
 }
 
+// Get returns the visible or queued Toast with the given Toast ID, if present.
+func (m Model) Get(id string) (Toast, bool) {
+	if t, ok := m.VisibleByID(id); ok {
+		return t, true
+	}
+	return m.QueuedByID(id)
+}
+
+// Has reports whether the given Toast ID is currently visible or queued.
+func (m Model) Has(id string) bool {
+	_, ok := m.Get(id)
+	return ok
+}
+
 // VisibleByID returns the visible Toast with the given Toast ID, if present.
 func (m Model) VisibleByID(id string) (Toast, bool) {
 	return findToast(m.visible, ID(id))
 }
 
-// IsVisible reports whether the given Toast ID is currently visible.
-func (m Model) IsVisible(id string) bool {
+// HasVisible reports whether the given Toast ID is currently visible.
+func (m Model) HasVisible(id string) bool {
 	_, ok := m.VisibleByID(id)
 	return ok
 }
+
+// IsVisible reports whether the given Toast ID is currently visible.
+func (m Model) IsVisible(id string) bool { return m.HasVisible(id) }
 
 // QueuedByID returns the queued Toast with the given Toast ID, if present.
 func (m Model) QueuedByID(id string) (Toast, bool) {
 	return findToast(m.queued, ID(id))
 }
 
-// IsQueued reports whether the given Toast ID is currently queued.
-func (m Model) IsQueued(id string) bool {
+// HasQueued reports whether the given Toast ID is currently queued.
+func (m Model) HasQueued(id string) bool {
 	_, ok := m.QueuedByID(id)
 	return ok
 }
+
+// IsQueued reports whether the given Toast ID is currently queued.
+func (m Model) IsQueued(id string) bool { return m.HasQueued(id) }
 
 func (m Model) Len() int { return len(m.visible) + len(m.queued) }
 
@@ -361,8 +458,9 @@ func (m Model) expire(msg expirationMsg) (Model, tea.Cmd) {
 func (m Model) drain() (Model, tea.Cmd) {
 	var cmds []tea.Cmd
 	for len(m.visible) < m.maxVisible && len(m.queued) > 0 {
-		e := m.queued[0]
-		m.queued = m.queued[1:]
+		i := nextQueuedIndex(m.queued)
+		e := m.queued[i]
+		m.queued = append(m.queued[:i], m.queued[i+1:]...)
 		e.renderedAt = time.Now()
 		m.visible = append(m.visible, e)
 		if cmd := m.timer(e); cmd != nil {
@@ -385,6 +483,80 @@ func indexOf(entries []entry, id ID) int {
 		}
 	}
 	return -1
+}
+
+func (m Model) resolvePriority(t Toast) Toast {
+	if t.Priority == 0 {
+		t.Priority = m.kindPriorities[t.Kind]
+	}
+	return t
+}
+
+func nextQueuedIndex(entries []entry) int {
+	if !usesPriority(entries, 0) {
+		return 0
+	}
+	highest := 0
+	for i := 1; i < len(entries); i++ {
+		if entries[i].toast.Priority > entries[highest].toast.Priority {
+			highest = i
+		}
+	}
+	return highest
+}
+
+func lowerPriorityVisibleIndex(entries []entry, priority int) int {
+	lowest := -1
+	for i, e := range entries {
+		if e.toast.Priority >= priority {
+			continue
+		}
+		if lowest == -1 || e.toast.Priority < entries[lowest].toast.Priority {
+			lowest = i
+		}
+	}
+	return lowest
+}
+
+func lowerPriorityQueuedIndex(entries []entry, priority int) int {
+	lowest := -1
+	for i, e := range entries {
+		if e.toast.Priority >= priority {
+			continue
+		}
+		if lowest == -1 || e.toast.Priority < entries[lowest].toast.Priority {
+			lowest = i
+		}
+	}
+	return lowest
+}
+
+func usesPriority(entries []entry, priority int) bool {
+	if priority != 0 {
+		return true
+	}
+	for _, e := range entries {
+		if e.toast.Priority != 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func indexOfDuplicate(entries []entry, t Toast) int {
+	for i, e := range entries {
+		if e.toast.Kind == t.Kind && e.toast.Message == t.Message {
+			return i
+		}
+	}
+	return -1
+}
+
+func nextOccurrenceCount(current int) int {
+	if current < 2 {
+		return 2
+	}
+	return current + 1
 }
 
 func findToast(entries []entry, id ID) (Toast, bool) {
@@ -466,6 +638,26 @@ func WithKindDuration(kind Kind, d time.Duration) Option {
 func WithMaxVisible(n int) Option { return func(m *Model) { m.maxVisible = n } }
 func WithMaxQueued(n int) Option  { return func(m *Model) { m.maxQueued = n } }
 
+// WithKindPriority configures the default priority for a Toast Kind.
+func WithKindPriority(kind Kind, priority int) Option {
+	return func(m *Model) {
+		if m.kindPriorities == nil {
+			m.kindPriorities = make(map[Kind]int)
+		}
+		m.kindPriorities[kind] = priority
+	}
+}
+
+// WithDuplicateCoalescing coalesces duplicate Toasts with matching Toast Kind and message.
+func WithDuplicateCoalescing() Option {
+	return func(m *Model) { m.coalesceDuplicates = true }
+}
+
+// WithoutDuplicateCoalescing disables duplicate Toast coalescing.
+func WithoutDuplicateCoalescing() Option {
+	return func(m *Model) { m.coalesceDuplicates = false }
+}
+
 // WithQueueOverflowPolicy configures which Toast is dropped when the queue is full.
 func WithQueueOverflowPolicy(policy QueueOverflowPolicy) Option {
 	return func(m *Model) { m.queueOverflowPolicy = policy }
@@ -484,6 +676,11 @@ func WithStyle(kind Kind, style lipgloss.Style) Option {
 }
 func WithRenderer(r Renderer) Option { return func(m *Model) { m.renderer = r } }
 
+// WithRendererPreset selects a built-in Toast presentation preset.
+func WithRendererPreset(p RendererPreset) Option {
+	return func(m *Model) { applyRendererPreset(m, p) }
+}
+
 // WithQueueIndicator customizes the affordance shown when Toasts are queued.
 func WithQueueIndicator(r QueueIndicatorRenderer) Option {
 	return func(m *Model) {
@@ -499,7 +696,7 @@ func WithoutQueueIndicator() Option {
 
 func WithProgress(enabled bool) Option {
 	return func(m *Model) {
-		if enabled {
+		if enabled && !m.noAnimation {
 			p := progress.New(
 				progress.WithDefaultGradient(),
 				progress.WithoutPercentage(),
@@ -516,7 +713,39 @@ func WithProgress(enabled bool) Option {
 func WithKindIcons() Option {
 	return func(m *Model) {
 		m.iconsEnabled = true
-		m.kindIcons = defaultKindIcons()
+		if m.asciiOnly {
+			m.kindIcons = asciiKindIcons()
+		} else {
+			m.kindIcons = defaultKindIcons()
+		}
+	}
+}
+
+// WithNoColor configures built-in rendering affordances to avoid ANSI colors.
+func WithNoColor() Option {
+	return func(m *Model) { m.noColor = true }
+}
+
+// WithNoAnimation disables animated built-in affordances such as Toast Lifetime progress.
+func WithNoAnimation() Option {
+	return func(m *Model) {
+		m.noAnimation = true
+		m.progressModel = nil
+	}
+}
+
+// WithASCIIOnly configures built-in rendering affordances to avoid Unicode.
+func WithASCIIOnly() Option {
+	return func(m *Model) {
+		m.asciiOnly = true
+		m.theme = asciiTheme(m.theme)
+		if m.iconsEnabled {
+			icons := asciiKindIcons()
+			for kind := range m.iconOverrides {
+				icons[kind] = m.kindIcons[kind]
+			}
+			m.kindIcons = icons
+		}
 	}
 }
 
@@ -525,8 +754,16 @@ func WithIcon(kind Kind, icon string) Option {
 	return func(m *Model) {
 		m.iconsEnabled = true
 		if m.kindIcons == nil {
-			m.kindIcons = defaultKindIcons()
+			if m.asciiOnly {
+				m.kindIcons = asciiKindIcons()
+			} else {
+				m.kindIcons = defaultKindIcons()
+			}
 		}
+		if m.iconOverrides == nil {
+			m.iconOverrides = make(map[Kind]bool)
+		}
+		m.iconOverrides[kind] = true
 		m.kindIcons[kind] = icon
 	}
 }
@@ -539,9 +776,20 @@ func WithoutIcons() Option {
 func WithID(id string) ToastOption             { return func(t *Toast) { t.ID = ID(id) } }
 func WithTitle(title string) ToastOption       { return func(t *Toast) { t.Title = title } }
 func WithKind(kind Kind) ToastOption           { return func(t *Toast) { t.Kind = kind } }
+func WithPriority(priority int) ToastOption    { return func(t *Toast) { t.Priority = priority } }
 func WithDuration(d time.Duration) ToastOption { return func(t *Toast) { t.Duration = d } }
 func WithPersistent() ToastOption              { return func(t *Toast) { t.Persistent = true } }
 func WithContent(content string) ToastOption   { return func(t *Toast) { t.Content = content } }
+
+// WithoutProgress disables Toast Lifetime progress rendering for this Toast.
+func WithoutProgress() ToastOption { return func(t *Toast) { t.ProgressDisabled = true } }
+
+// WithAction adds a keyboard action hint and command to a Toast.
+func WithAction(key, label string, cmd tea.Cmd) ToastOption {
+	return func(t *Toast) {
+		t.Actions = append(t.Actions, ToastAction{Key: key, Label: label, Cmd: cmd})
+	}
+}
 
 func newEpoch() uint64 {
 	var b [8]byte

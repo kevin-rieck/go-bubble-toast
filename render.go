@@ -18,6 +18,68 @@ func DefaultTheme() Theme {
 	}
 }
 
+func asciiBorder() lipgloss.Border {
+	return lipgloss.Border{
+		Top:         "-",
+		Bottom:      "-",
+		Left:        "|",
+		Right:       "|",
+		TopLeft:     "+",
+		TopRight:    "+",
+		BottomLeft:  "+",
+		BottomRight: "+",
+	}
+}
+
+func asciiTheme(theme Theme) Theme {
+	border := asciiBorder()
+	return Theme{
+		None:    theme.None.Border(border),
+		Info:    theme.Info.Border(border),
+		Success: theme.Success.Border(border),
+		Warning: theme.Warning.Border(border),
+		Error:   theme.Error.Border(border),
+	}
+}
+
+func noColorStyle(style lipgloss.Style) lipgloss.Style {
+	return style.
+		UnsetForeground().
+		UnsetBackground().
+		UnsetBorderForeground().
+		UnsetBorderBackground()
+}
+
+func applyRendererPreset(m *Model, preset RendererPreset) {
+	switch preset {
+	case PresetCompact:
+		m.theme = mapThemeStyles(m.theme, func(style lipgloss.Style) lipgloss.Style {
+			return style.Padding(0)
+		})
+	case PresetMinimal:
+		m.theme = mapThemeStyles(m.theme, func(style lipgloss.Style) lipgloss.Style {
+			return style.Border(lipgloss.Border{}).Padding(0)
+		})
+	case PresetIcon:
+		m.iconsEnabled = true
+		if m.asciiOnly {
+			m.kindIcons = asciiKindIcons()
+		} else {
+			m.kindIcons = defaultKindIcons()
+		}
+	}
+}
+
+func mapThemeStyles(theme Theme, fn func(lipgloss.Style) lipgloss.Style) Theme {
+	return Theme{
+		None:    fn(theme.None),
+		Info:    fn(theme.Info),
+		Success: fn(theme.Success),
+		Warning: fn(theme.Warning),
+		Error:   fn(theme.Error),
+	}
+}
+
 func (m Model) View() string {
 	entries := m.renderEntries()
 	if len(entries) == 0 {
@@ -114,6 +176,9 @@ func (m Model) renderToast(e entry, index, total int) string {
 	}
 
 	style := m.styleFor(t.Kind)
+	if m.noColor {
+		style = noColorStyle(style)
+	}
 	innerWidth := targetWidth - style.GetHorizontalFrameSize()
 	if innerWidth < 1 {
 		innerWidth = 1
@@ -141,9 +206,19 @@ func (m Model) renderToast(e entry, index, total int) string {
 		body = m.withKindIcon(t.Kind, body)
 	}
 
+	if t.Occurrences > 1 && body != "" {
+		body += " (x" + strconv64(uint64(t.Occurrences)) + ")"
+	}
+	if hints := actionHints(t.Actions); hints != "" {
+		if body != "" {
+			body += "\n"
+		}
+		body += hints
+	}
+
 	body = wrap(body, innerWidth)
 
-	if m.progressModel != nil && !t.Persistent {
+	if m.progressModel != nil && !t.Persistent && !t.ProgressDisabled {
 		percent := m.progressFraction(e)
 
 		p := *m.progressModel
@@ -181,6 +256,20 @@ func (m Model) renderQueueIndicator() string {
 	return "+" + strconv64(uint64(ctx.Count)) + " more"
 }
 
+func actionHints(actions []ToastAction) string {
+	if len(actions) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(actions))
+	for _, action := range actions {
+		if action.Key == "" || action.Label == "" {
+			continue
+		}
+		parts = append(parts, "["+action.Key+"] "+action.Label)
+	}
+	return strings.Join(parts, "  ")
+}
+
 func (m Model) withKindIcon(kind Kind, body string) string {
 	if !m.iconsEnabled || body == "" {
 		return body
@@ -198,6 +287,15 @@ func defaultKindIcons() map[Kind]string {
 		KindSuccess: "✓",
 		KindWarning: "⚠",
 		KindError:   "✕",
+	}
+}
+
+func asciiKindIcons() map[Kind]string {
+	return map[Kind]string{
+		KindInfo:    "i",
+		KindSuccess: "v",
+		KindWarning: "!",
+		KindError:   "x",
 	}
 }
 

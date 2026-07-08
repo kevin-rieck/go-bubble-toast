@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/kevin-rieck/go-bubble-toast"
+	"github.com/kevin-rieck/go-bubble-toast/examples/internal/layout"
 )
 
 type model struct {
@@ -51,5 +52,5 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m model) View() string {
 	base := "Bubble Toast progress example\n\nPress t to show a Toast. Press q to quit."
-	return m.toasts.Overlay(base)
+	return layout.Columns(base, m.toasts.View())
 }

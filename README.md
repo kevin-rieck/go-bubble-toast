@@ -1,28 +1,29 @@
 # Bubble Toast
 
-Bubble Toast is a Bubble Tea/Lip Gloss component for transient, non-blocking Toasts in terminal UIs.
+Transient, non-blocking toast notifications for [Bubble Tea](https://github.com/charmbracelet/bubbletea) apps, styled with [Lip Gloss](https://github.com/charmbracelet/lipgloss).
 
-## Demo
+![Bubble Toast workflow demo](assets/gifdemo.gif)
 
-![Bubble Toast feature showcase](assets/showcase.gif)
+Bubble Toast gives your TUI the familiar “web app toast” feel without blocking input or taking over the screen. Use it for background jobs, saves, sync status, warnings, undo prompts, and short-lived success/error feedback.
 
-### More examples
+## Features
 
-| Startup Toast | Toast stack | Progress bar |
-| --- | --- | --- |
-| ![Startup Toast](assets/startup.gif) | ![Multiple Toasts](assets/burst.gif) | ![Progress bar Toasts](assets/progress.gif) |
+- Info, success, warning, error, and neutral Toast kinds
+- Overlay placement: corners or centered at the top/bottom
+- Timed, persistent, and progress-indicated Toast lifetimes
+- Stable IDs for replacing long-running status Toasts
+- Queueing with `+N more`, priority, overflow policies, and duplicate coalescing
+- Keyboard actions like `[u] undo`
+- Icons, ASCII/no-color/no-animation compatibility modes
+- Renderer presets, custom themes, and full custom rendering
 
-These GIFs were created with [VHS](https://github.com/charmbracelet/vhs).
-
-## Run the example
+## Install
 
 ```sh
-go run ./examples/basic
+go get github.com/kevin-rieck/go-bubble-toast
 ```
 
-Press `t` to show Toasts and `q` to quit.
-
-## Basic usage
+## Quick start
 
 ```go
 type model struct {
@@ -44,85 +45,61 @@ func (m model) View() string {
 }
 ```
 
-Small apps can also push directly:
+## Common patterns
 
-```go
-m := toast.New()
-m, id, cmd := m.Push(toast.Success("saved"))
-_, _ = id, cmd
-```
-
-## Updating a long-running status Toast
-
-Use a stable Toast ID when a status may change over time. `Replace` reuses the
-same Toast ID, so the Toast Stack or queue keeps one entry for that status.
+Replace a long-running status Toast by ID:
 
 ```go
 const syncStatus = "sync-status"
 
 cmd := toast.Replace(syncStatus, toast.Info("syncing", toast.WithPersistent()))
-
-// Later, when the work finishes:
 cmd = toast.Replace(syncStatus, toast.Success("synced"))
 ```
 
-Direct model updates use the same replacement behavior:
-
-```go
-m, cmd = m.Replace(syncStatus, toast.Error("sync failed"))
-```
-
-## Toast Kind icons
-
-Enable Toast Kind icons when color alone should not communicate Toast intent:
-
-```go
-m := toast.New(toast.WithKindIcons())
-```
-
-Built-in icons are available for info, success, warning, and error Toasts. Apps
-can override icons or disable them globally for terminals and fonts where icons
-are not appropriate:
+Queue overflow, priority, and duplicate coalescing:
 
 ```go
 m := toast.New(
-    toast.WithKindIcons(),
-    toast.WithIcon(toast.KindSuccess, "OK"),
+    toast.WithMaxVisible(2),
+    toast.WithKindPriority(toast.KindError, 10),
+    toast.WithDuplicateCoalescing(),
 )
-
-// Or disable icons globally when terminal/font support is unsuitable.
-m := toast.New(toast.WithoutIcons())
 ```
 
-Icons are added to Toasts rendered from title/message fields. `WithContent`
-remains pre-rendered content and is not modified.
-
-## Queue behavior
-
-When the visible Toast Stack is full, Bubble Toast queues overflow Toasts. The
-default full-queue behavior preserves previous releases by dropping the oldest
-queued Toast when a new Toast arrives. Apps can instead drop the newest incoming
-Toast:
+Action Toasts:
 
 ```go
-m := toast.New(toast.WithQueueOverflowPolicy(toast.DropNewestToast))
+cmd := toast.Show(toast.Warning(
+    "file deleted",
+    toast.WithAction("u", "undo", func() tea.Msg { return undoDeleteMsg{} }),
+))
 ```
 
-Matching Toast ID updates still replace the existing visible or queued Toast and
-do not consume queue capacity.
-
-Bubble Toast also renders a `+N more` indicator for queued Toasts. Apps can
-customize or disable that stack-level affordance:
+Compatibility and custom rendering:
 
 ```go
 m := toast.New(
-    toast.WithQueueIndicator(func(ctx toast.QueueIndicatorContext) string {
-        return fmt.Sprintf("waiting: %d", ctx.Count)
-    }),
+    toast.WithASCIIOnly(),
+    toast.WithNoColor(),
+    toast.WithRendererPreset(toast.PresetIcon),
 )
-
-m = toast.New(toast.WithoutQueueIndicator())
 ```
+
+## Examples
+
+```sh
+go run ./examples/basic
+go run ./examples/ergonomics
+go run ./examples/interactive
+```
+
+The GIFs are recorded with [VHS](https://github.com/charmbracelet/vhs). The recording-only demo lives in `examples/gifdemo`.
+
+## More demos
+
+| Startup Toast | Toast stack | Progress bar |
+| --- | --- | --- |
+| ![Startup Toast](assets/startup.gif) | ![Multiple Toasts](assets/burst.gif) | ![Progress bar Toasts](assets/progress.gif) |
 
 ## Release
 

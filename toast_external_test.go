@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	toast "github.com/kevin-rieck/go-bubble-toast"
+	"github.com/muesli/termenv"
 )
 
 func TestAppCanQueryVisibleToastByID(t *testing.T) {
@@ -46,6 +47,32 @@ func TestAppCanQueryQueuedToastByID(t *testing.T) {
 	}
 }
 
+func TestAppCanCheckVisibleAndQueuedToastsByID(t *testing.T) {
+	model := toast.New(toast.WithMaxVisible(1))
+	model, _, _ = model.Push(toast.NewToast("visible", toast.WithID("visible")))
+	model, _, _ = model.Push(toast.NewToast("queued", toast.WithID("queued")))
+
+	if !model.HasVisible("visible") || model.HasVisible("queued") {
+		t.Fatalf("HasVisible should only match visible Toast IDs")
+	}
+	if !model.HasQueued("queued") || model.HasQueued("visible") {
+		t.Fatalf("HasQueued should only match queued Toast IDs")
+	}
+}
+
+func TestAppCanCheckAnyToastByID(t *testing.T) {
+	model := toast.New(toast.WithMaxVisible(1))
+	model, _, _ = model.Push(toast.NewToast("visible", toast.WithID("visible")))
+	model, _, _ = model.Push(toast.NewToast("queued", toast.WithID("queued")))
+
+	if !model.Has("visible") || !model.Has("queued") {
+		t.Fatalf("Has should match visible and queued Toast IDs")
+	}
+	if model.Has("missing") {
+		t.Fatal("Has should not match missing Toast IDs")
+	}
+}
+
 func TestToastIDQueriesDoNotFindMissingOrDismissedToasts(t *testing.T) {
 	model := toast.New(toast.WithMaxVisible(1))
 	model, _, _ = model.Push(toast.NewToast("visible", toast.WithID("visible")))
@@ -63,6 +90,24 @@ func TestToastIDQueriesDoNotFindMissingOrDismissedToasts(t *testing.T) {
 
 	if model.IsVisible("visible") || model.IsQueued("queued") {
 		t.Fatal("dismissed Toast IDs should not be reported visible or queued")
+	}
+}
+
+func TestAppCanQueryAnyToastByID(t *testing.T) {
+	model := toast.New(toast.WithMaxVisible(1))
+	model, _, _ = model.Push(toast.NewToast("visible", toast.WithID("visible")))
+	model, _, _ = model.Push(toast.NewToast("queued", toast.WithID("queued")))
+
+	visible, ok := model.Get("visible")
+	if !ok || visible.ID != "visible" || visible.Message != "visible" {
+		t.Fatalf("Get should find visible Toasts by Toast ID, got %#v ok=%v", visible, ok)
+	}
+	queued, ok := model.Get("queued")
+	if !ok || queued.ID != "queued" || queued.Message != "queued" {
+		t.Fatalf("Get should find queued Toasts by Toast ID, got %#v ok=%v", queued, ok)
+	}
+	if _, ok := model.Get("missing"); ok {
+		t.Fatal("Get should not find missing Toast IDs")
 	}
 }
 
@@ -182,6 +227,65 @@ func TestPublicReplaceHelperUpdatesQueuedToastInPlace(t *testing.T) {
 	}
 }
 
+func TestHighPriorityToastBecomesVisibleWhenStackIsFull(t *testing.T) {
+	model := toast.New(toast.WithMaxVisible(1), toast.WithMaxQueued(2))
+	model, _, _ = model.Push(toast.NewToast("routine", toast.WithID("routine")))
+	model, _, _ = model.Push(toast.NewToast("critical", toast.WithID("critical"), toast.WithPriority(10)))
+
+	if !model.IsVisible("critical") {
+		t.Fatalf("high-priority Toast should be visible promptly, visible=%#v queued=%#v", model.Visible(), model.Queued())
+	}
+	if !model.IsQueued("routine") {
+		t.Fatalf("lower-priority visible Toast should move to queue, visible=%#v queued=%#v", model.Visible(), model.Queued())
+	}
+}
+
+func TestKindPriorityMakesMatchingToastVisibleWhenStackIsFull(t *testing.T) {
+	model := toast.New(toast.WithMaxVisible(1), toast.WithMaxQueued(2), toast.WithKindPriority(toast.KindError, 10))
+	model, _, _ = model.Push(toast.Info("routine", toast.WithID("routine")))
+	model, _, _ = model.Push(toast.Error("critical", toast.WithID("critical")))
+
+	if !model.IsVisible("critical") || !model.IsQueued("routine") {
+		t.Fatalf("kind priority should make matching Toast visible, visible=%#v queued=%#v", model.Visible(), model.Queued())
+	}
+}
+
+func TestPriorityOverflowKeepsHighestPriorityQueuedToasts(t *testing.T) {
+	model := toast.New(toast.WithMaxVisible(1), toast.WithMaxQueued(2))
+	model, _, _ = model.Push(toast.NewToast("visible", toast.WithID("visible"), toast.WithPriority(20)))
+	model, _, _ = model.Push(toast.NewToast("low", toast.WithID("low"), toast.WithPriority(1)))
+	model, _, _ = model.Push(toast.NewToast("medium", toast.WithID("medium"), toast.WithPriority(5)))
+	model, _, _ = model.Push(toast.NewToast("high", toast.WithID("high"), toast.WithPriority(10)))
+
+	if model.IsQueued("low") || !model.IsQueued("medium") || !model.IsQueued("high") {
+		t.Fatalf("priority overflow should keep highest-priority queued Toasts, queued=%#v", model.Queued())
+	}
+}
+
+func TestLowerPriorityOverflowDoesNotDisplaceHigherPriorityQueue(t *testing.T) {
+	model := toast.New(toast.WithMaxVisible(1), toast.WithMaxQueued(2))
+	model, _, _ = model.Push(toast.NewToast("visible", toast.WithID("visible"), toast.WithPriority(20)))
+	model, _, _ = model.Push(toast.NewToast("medium", toast.WithID("medium"), toast.WithPriority(5)))
+	model, _, _ = model.Push(toast.NewToast("high", toast.WithID("high"), toast.WithPriority(10)))
+	model, _, _ = model.Push(toast.NewToast("low", toast.WithID("low"), toast.WithPriority(1)))
+
+	if model.IsQueued("low") || !model.IsQueued("medium") || !model.IsQueued("high") {
+		t.Fatalf("lower-priority overflow should not displace higher-priority queue, queued=%#v", model.Queued())
+	}
+}
+
+func TestPriorityQueueDrainsHighestPriorityFirst(t *testing.T) {
+	model := toast.New(toast.WithMaxVisible(1), toast.WithMaxQueued(3))
+	model, _, _ = model.Push(toast.NewToast("visible", toast.WithID("visible"), toast.WithPriority(20)))
+	model, _, _ = model.Push(toast.NewToast("medium", toast.WithID("medium"), toast.WithPriority(5)))
+	model, _, _ = model.Push(toast.NewToast("high", toast.WithID("high"), toast.WithPriority(10)))
+
+	model, _ = model.Dismiss("visible")
+	if !model.IsVisible("high") {
+		t.Fatalf("priority queue should drain highest-priority Toast first, visible=%#v queued=%#v", model.Visible(), model.Queued())
+	}
+}
+
 func TestQueueOverflowPolicyCanDropNewestIncomingToast(t *testing.T) {
 	model := toast.New(
 		toast.WithMaxVisible(1),
@@ -212,6 +316,62 @@ func TestQueueOverflowPolicyCanDropNewestIncomingToast(t *testing.T) {
 	visible := model.Visible()
 	if len(visible) != 1 || visible[0].ID != "first" {
 		t.Fatalf("queue should drain in FIFO order after DropNewestToast overflow, visible=%#v", visible)
+	}
+}
+
+func TestRendererPresetMinimalRendersToastContentWithoutBorder(t *testing.T) {
+	model := toast.New(toast.WithRendererPreset(toast.PresetMinimal), toast.WithWidth(20))
+	model, _, _ = model.Push(toast.Success("saved", toast.WithTitle("Done")))
+
+	view := model.View()
+	if !strings.Contains(view, "Done") || !strings.Contains(view, "saved") {
+		t.Fatalf("minimal preset should render Toast Content, got %q", view)
+	}
+	for _, border := range []string{"╭", "╮", "╰", "╯", "─", "│"} {
+		if strings.Contains(view, border) {
+			t.Fatalf("minimal preset should avoid bordered presentation, got %q", view)
+		}
+	}
+}
+
+func TestRendererPresetCompactKeepsBorderWithLessPadding(t *testing.T) {
+	model := toast.New(toast.WithRendererPreset(toast.PresetCompact), toast.WithWidth(12), toast.WithMaxHeight(0))
+	model, _, _ = model.Push(toast.Success("saved"))
+
+	view := model.View()
+	if !strings.Contains(view, "│saved") {
+		t.Fatalf("compact preset should reduce padding inside bordered Toast, got %q", view)
+	}
+	if !strings.Contains(view, "╭") || !strings.Contains(view, "╯") {
+		t.Fatalf("compact preset should keep bordered presentation, got %q", view)
+	}
+}
+
+func TestRendererPresetIconRendersKindAffordance(t *testing.T) {
+	model := toast.New(
+		toast.WithRendererPreset(toast.PresetIcon),
+		toast.WithStyle(toast.KindError, lipgloss.NewStyle()),
+	)
+	model, _, _ = model.Push(toast.Error("failed"))
+
+	view := model.View()
+	if !strings.Contains(view, "✕ failed") {
+		t.Fatalf("icon preset should render a Toast Kind affordance, got %q", view)
+	}
+}
+
+func TestRendererPresetDoesNotOverrideCustomRenderer(t *testing.T) {
+	model := toast.New(
+		toast.WithRendererPreset(toast.PresetIcon),
+		toast.WithRenderer(func(t toast.Toast, _ toast.RenderContext) string {
+			return "custom:" + t.Message
+		}),
+	)
+	model, _, _ = model.Push(toast.Error("failed"))
+
+	view := model.View()
+	if view != "custom:failed" {
+		t.Fatalf("custom renderer should take precedence over renderer preset, got %q", view)
 	}
 }
 
@@ -289,6 +449,182 @@ func TestKindIconsDoNotChangePreRenderedContent(t *testing.T) {
 	}
 }
 
+func TestToastCanDisableLifetimeProgressRendering(t *testing.T) {
+	model := toast.New(
+		toast.WithProgress(true),
+		toast.WithRendererPreset(toast.PresetMinimal),
+		toast.WithWidth(30),
+	)
+	model, _, _ = model.Push(toast.NewToast("quiet lifetime", toast.WithoutProgress()))
+
+	view := model.View()
+	if strings.Contains(view, "─") {
+		t.Fatalf("Toast-level progress opt-out should suppress progress output, got %q", view)
+	}
+	if !strings.Contains(view, "quiet lifetime") {
+		t.Fatalf("Toast-level progress opt-out should preserve Toast Content, got %q", view)
+	}
+}
+
+func TestNoAnimationModeDisablesLifetimeProgressRendering(t *testing.T) {
+	model := toast.New(
+		toast.WithProgress(true),
+		toast.WithNoAnimation(),
+		toast.WithRendererPreset(toast.PresetMinimal),
+		toast.WithWidth(30),
+	)
+	model, _, _ = model.Push(toast.NewToast("static lifetime"))
+
+	view := model.View()
+	if strings.Contains(view, "─") {
+		t.Fatalf("no-animation mode should suppress animated progress output, got %q", view)
+	}
+	if !strings.Contains(view, "static lifetime") {
+		t.Fatalf("no-animation mode should preserve Toast Content, got %q", view)
+	}
+}
+
+func TestNoAnimationModeWinsRegardlessOfOptionOrder(t *testing.T) {
+	model := toast.New(
+		toast.WithNoAnimation(),
+		toast.WithProgress(true),
+		toast.WithRendererPreset(toast.PresetMinimal),
+		toast.WithWidth(30),
+	)
+	model, _, _ = model.Push(toast.NewToast("static lifetime"))
+
+	if view := model.View(); strings.Contains(view, "─") {
+		t.Fatalf("no-animation mode should win regardless of option order, got %q", view)
+	}
+}
+
+func TestASCIIOnlyRenderingKeepsHostIconOverrides(t *testing.T) {
+	model := toast.New(
+		toast.WithKindIcons(),
+		toast.WithIcon(toast.KindSuccess, "OK"),
+		toast.WithASCIIOnly(),
+		toast.WithStyle(toast.KindSuccess, lipgloss.NewStyle()),
+	)
+	model, _, _ = model.Push(toast.Success("saved"))
+
+	view := model.View()
+	if !strings.Contains(view, "OK saved") {
+		t.Fatalf("expected host icon override to remain under host control, got %q", view)
+	}
+	if strings.Contains(view, "v saved") || strings.Contains(view, "✓ saved") {
+		t.Fatalf("ASCII-only mode should not replace host icon override, got %q", view)
+	}
+}
+
+func TestNoColorRenderingAvoidsANSIEscapeSequences(t *testing.T) {
+	previousProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
+
+	model := toast.New(toast.WithNoColor(), toast.WithWidth(18))
+	model, _, _ = model.Push(toast.Error("failed"))
+
+	view := model.View()
+	if strings.Contains(view, "\x1b[") {
+		t.Fatalf("expected no-color built-in rendering to avoid ANSI escape sequences, got %q", view)
+	}
+	if !strings.Contains(view, "failed") {
+		t.Fatalf("expected Toast message to remain rendered, got %q", view)
+	}
+}
+
+func TestASCIIOnlyRenderingUsesASCIIAffordances(t *testing.T) {
+	model := toast.New(
+		toast.WithASCIIOnly(),
+		toast.WithKindIcons(),
+		toast.WithMaxVisible(4),
+		toast.WithWidth(18),
+		toast.WithMaxHeight(0),
+	)
+	model, _, _ = model.Push(toast.Info("info"))
+	model, _, _ = model.Push(toast.Success("saved"))
+	model, _, _ = model.Push(toast.Warning("careful"))
+	model, _, _ = model.Push(toast.Error("failed"))
+
+	view := model.View()
+	for _, want := range []string{"i info", "v saved", "! careful", "x failed"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("expected ASCII-only Toast Stack to contain %q, got %q", want, view)
+		}
+	}
+	for _, notWant := range []string{"ℹ", "✓", "⚠", "✕", "╭", "╮", "╰", "╯", "─", "│"} {
+		if strings.Contains(view, notWant) {
+			t.Fatalf("ASCII-only rendering should avoid %q, got %q", notWant, view)
+		}
+	}
+}
+
+func TestDuplicateToastCoalescingShowsOccurrenceCount(t *testing.T) {
+	model := toast.New(
+		toast.WithDuplicateCoalescing(),
+		toast.WithStyle(toast.KindWarning, lipgloss.NewStyle()),
+	)
+	model, _, _ = model.Push(toast.Warning("connection failed"))
+	model, _, _ = model.Push(toast.Warning("connection failed"))
+	model, _, _ = model.Push(toast.Warning("connection failed"))
+
+	if model.Len() != 1 {
+		t.Fatalf("duplicate Toasts should coalesce into one Toast, len=%d", model.Len())
+	}
+	view := model.View()
+	if !strings.Contains(view, "connection failed") || !strings.Contains(view, "(x3)") {
+		t.Fatalf("coalesced Toast should render message and occurrence count, got %q", view)
+	}
+}
+
+func TestDuplicateToastCoalescingMergesQueuedToasts(t *testing.T) {
+	model := toast.New(
+		toast.WithDuplicateCoalescing(),
+		toast.WithMaxVisible(1),
+		toast.WithStyle(toast.KindNone, lipgloss.NewStyle()),
+		toast.WithWidth(30),
+		toast.WithMaxHeight(0),
+	)
+	model, _, _ = model.Push(toast.NewToast("visible"))
+	model, _, _ = model.Push(toast.NewToast("retrying"))
+	model, _, _ = model.Push(toast.NewToast("retrying"))
+
+	queued := model.Queued()
+	if len(queued) != 1 {
+		t.Fatalf("duplicate queued Toasts should coalesce into one queued Toast, queued=%#v", queued)
+	}
+	model, _ = model.Dismiss(string(model.Visible()[0].ID))
+	if view := model.View(); !strings.Contains(view, "retrying") || !strings.Contains(view, "(x2)") {
+		t.Fatalf("coalesced queued Toast should render occurrence count when visible, got %q", view)
+	}
+}
+
+func TestDuplicateToastCoalescingKeepsDistinctKindsAndDefaultBehavior(t *testing.T) {
+	plain := toast.New(toast.WithStyle(toast.KindNone, lipgloss.NewStyle()))
+	plain, _, _ = plain.Push(toast.NewToast("same"))
+	plain, _, _ = plain.Push(toast.NewToast("same"))
+	if plain.Len() != 2 {
+		t.Fatalf("duplicate Toasts should remain distinct unless coalescing is enabled, len=%d", plain.Len())
+	}
+
+	coalescing := toast.New(toast.WithDuplicateCoalescing(), toast.WithMaxVisible(2))
+	coalescing, _, _ = coalescing.Push(toast.Warning("same"))
+	coalescing, _, _ = coalescing.Push(toast.Error("same"))
+	if coalescing.Len() != 2 {
+		t.Fatalf("Toasts with different Toast Kinds should remain distinct, len=%d", coalescing.Len())
+	}
+}
+
+func TestDuplicateToastCoalescingKeepsExplicitToastIDsDistinct(t *testing.T) {
+	model := toast.New(toast.WithDuplicateCoalescing(), toast.WithMaxVisible(2))
+	model, _, _ = model.Push(toast.Warning("same", toast.WithID("first")))
+	model, _, _ = model.Push(toast.Warning("same", toast.WithID("second")))
+
+	if model.Len() != 2 || !model.IsVisible("first") || !model.IsVisible("second") {
+		t.Fatalf("explicit Toast IDs should keep matching messages distinct, visible=%#v", model.Visible())
+	}
+}
+
 func TestQueueIndicatorShowsQueuedCountAndDisappearsAsQueueDrains(t *testing.T) {
 	model := toast.New(
 		toast.WithMaxVisible(1),
@@ -361,6 +697,49 @@ func TestQueueIndicatorPlacementCustomizationAndDisable(t *testing.T) {
 	disabled := pushQueued(toast.New(toast.WithMaxVisible(1), toast.WithoutQueueIndicator()))
 	if view := disabled.View(); strings.Contains(view, "more") {
 		t.Fatalf("expected disabled queue indicator to be omitted, got %q", view)
+	}
+}
+
+func TestKeyboardActionToastRendersUserVisibleHint(t *testing.T) {
+	model := toast.New(toast.WithStyle(toast.KindNone, lipgloss.NewStyle()))
+	model, _, _ = model.Push(toast.NewToast("file deleted", toast.WithAction("u", "undo", nil)))
+
+	view := model.View()
+	if !strings.Contains(view, "file deleted") || !strings.Contains(view, "[u] undo") {
+		t.Fatalf("action Toast should render user-visible key hint, got %q", view)
+	}
+}
+
+func TestKeyboardActionToastTriggersCommandAndDismisses(t *testing.T) {
+	type undoMsg struct{}
+	model := toast.New()
+	model, _, _ = model.Push(toast.NewToast("file deleted", toast.WithID("delete"), toast.WithAction("u", "undo", func() tea.Msg {
+		return undoMsg{}
+	})))
+
+	var cmd tea.Cmd
+	model, cmd = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'u'}})
+	if cmd == nil {
+		t.Fatal("matching Toast action key should return action command")
+	}
+	if _, ok := cmd().(undoMsg); !ok {
+		t.Fatalf("matching Toast action key returned unexpected message %#v", cmd())
+	}
+	if model.IsVisible("delete") {
+		t.Fatal("invoking a Toast action should dismiss that Toast")
+	}
+}
+
+func TestToastWithoutActionsIgnoresKeyMessages(t *testing.T) {
+	model := toast.New()
+	model, _, _ = model.Push(toast.NewToast("plain", toast.WithID("plain")))
+
+	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'u'}})
+	if cmd != nil {
+		t.Fatal("Toast without actions should not return a command for key messages")
+	}
+	if !updated.IsVisible("plain") {
+		t.Fatal("Toast without actions should remain visible after key messages")
 	}
 }
 
