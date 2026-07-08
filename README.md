@@ -19,11 +19,13 @@ These GIFs were created with [VHS](https://github.com/charmbracelet/vhs).
 ```sh
 go run ./examples/basic
 go run ./examples/ergonomics
+go run ./examples/interactive
 ```
 
 The basic example shows a minimal Toast integration. The ergonomics example shows
 status replacement, keyboard Dismissal, action Toasts, accessible icons,
-compatibility modes, priority, queue indicators, and duplicate coalescing.
+compatibility modes, priority, queue indicators, and duplicate coalescing. The
+interactive example walks through the current feature set with keyboard controls.
 
 ## Basic usage
 
