@@ -157,6 +157,7 @@ type Model struct {
 	iconOverrides          map[Kind]bool
 	asciiOnly              bool
 	noColor                bool
+	noAnimation            bool
 	coalesceDuplicates     bool
 
 	visible []entry
@@ -217,7 +218,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		m.winW, m.winH = msg.Width, msg.Height
 		return m, nil
 	case progress.FrameMsg:
-		if m.progressModel != nil {
+		if m.progressModel != nil && !m.noAnimation {
 			progressModel, cmd := m.progressModel.Update(msg)
 			p := progressModel.(progress.Model)
 			m.progressModel = &p
@@ -225,7 +226,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		}
 		return m, nil
 	case progressTickMsg:
-		if m.progressModel == nil || len(m.visible) == 0 {
+		if m.progressModel == nil || m.noAnimation || len(m.visible) == 0 {
 			return m, nil
 		}
 		return m, tickProgress()
@@ -688,7 +689,7 @@ func WithoutQueueIndicator() Option {
 
 func WithProgress(enabled bool) Option {
 	return func(m *Model) {
-		if enabled {
+		if enabled && !m.noAnimation {
 			p := progress.New(
 				progress.WithDefaultGradient(),
 				progress.WithoutPercentage(),
@@ -716,6 +717,14 @@ func WithKindIcons() Option {
 // WithNoColor configures built-in rendering affordances to avoid ANSI colors.
 func WithNoColor() Option {
 	return func(m *Model) { m.noColor = true }
+}
+
+// WithNoAnimation disables animated built-in affordances such as Toast Lifetime progress.
+func WithNoAnimation() Option {
+	return func(m *Model) {
+		m.noAnimation = true
+		m.progressModel = nil
+	}
 }
 
 // WithASCIIOnly configures built-in rendering affordances to avoid Unicode.

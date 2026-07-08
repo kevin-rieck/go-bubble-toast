@@ -436,6 +436,38 @@ func TestKindIconsDoNotChangePreRenderedContent(t *testing.T) {
 	}
 }
 
+func TestNoAnimationModeDisablesLifetimeProgressRendering(t *testing.T) {
+	model := toast.New(
+		toast.WithProgress(true),
+		toast.WithNoAnimation(),
+		toast.WithRendererPreset(toast.PresetMinimal),
+		toast.WithWidth(30),
+	)
+	model, _, _ = model.Push(toast.NewToast("static lifetime"))
+
+	view := model.View()
+	if strings.Contains(view, "─") {
+		t.Fatalf("no-animation mode should suppress animated progress output, got %q", view)
+	}
+	if !strings.Contains(view, "static lifetime") {
+		t.Fatalf("no-animation mode should preserve Toast Content, got %q", view)
+	}
+}
+
+func TestNoAnimationModeWinsRegardlessOfOptionOrder(t *testing.T) {
+	model := toast.New(
+		toast.WithNoAnimation(),
+		toast.WithProgress(true),
+		toast.WithRendererPreset(toast.PresetMinimal),
+		toast.WithWidth(30),
+	)
+	model, _, _ = model.Push(toast.NewToast("static lifetime"))
+
+	if view := model.View(); strings.Contains(view, "─") {
+		t.Fatalf("no-animation mode should win regardless of option order, got %q", view)
+	}
+}
+
 func TestASCIIOnlyRenderingKeepsHostIconOverrides(t *testing.T) {
 	model := toast.New(
 		toast.WithKindIcons(),

@@ -18,7 +18,7 @@ func (m Model) timer(e entry) tea.Cmd {
 			return expirationMsg{id: e.toast.ID, generation: e.generation, epoch: epoch}
 		}),
 	}
-	if m.progressModel != nil {
+	if m.progressModel != nil && !m.noAnimation {
 		cmds = append(cmds, tickProgress())
 	}
 	return tea.Batch(cmds...)

@@ -117,7 +117,12 @@ m := toast.New(
 ```
 
 Host-provided icon overrides and custom renderers remain under the host app's
-control.
+control. Apps can also disable animated built-in affordances, such as Toast
+Lifetime progress indicators:
+
+```go
+m := toast.New(toast.WithNoAnimation())
+```
 
 ## Renderer presets
 
