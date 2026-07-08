@@ -8,6 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/kevin-rieck/go-bubble-toast"
+	"github.com/kevin-rieck/go-bubble-toast/examples/internal/layout"
 )
 
 const syncStatusID = "sync-status"
@@ -35,6 +36,7 @@ func newModel(ascii bool) model {
 		toast.WithRendererPreset(toast.PresetIcon),
 		toast.WithKindIcons(),
 		toast.WithKindPriority(toast.KindError, 10),
+		toast.WithKindDuration(toast.KindError, 8*time.Second),
 		toast.WithMaxVisible(2),
 		toast.WithMaxQueued(3),
 		toast.WithQueueOverflowPolicy(toast.DropNewestToast),
@@ -93,13 +95,13 @@ func (m model) View() string {
 		"Bubble Toast ergonomics example",
 		"",
 		"s: long-running status replacement",
-		"b: burst queue, priority, and duplicate coalescing",
+		"b: burst queue, error duration, priority, and duplicate coalescing",
 		"d: action Toast with undo key",
 		"esc: dismiss newest visible Toast",
 		"a: toggle compatibility mode (" + compat + ")",
 		"q: quit",
 	}, "\n")
-	return m.toasts.Overlay(base)
+	return layout.Columns(base, m.toasts.View())
 }
 
 func startSync() tea.Cmd {

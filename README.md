@@ -1,33 +1,29 @@
 # Bubble Toast
 
-Bubble Toast is a Bubble Tea/Lip Gloss component for transient, non-blocking Toasts in terminal UIs.
+Transient, non-blocking toast notifications for [Bubble Tea](https://github.com/charmbracelet/bubbletea) apps, styled with [Lip Gloss](https://github.com/charmbracelet/lipgloss).
 
-## Demo
+![Bubble Toast workflow demo](assets/gifdemo.gif)
 
-![Bubble Toast feature showcase](assets/showcase.gif)
+Bubble Toast gives your TUI the familiar “web app toast” feel without blocking input or taking over the screen. Use it for background jobs, saves, sync status, warnings, undo prompts, and short-lived success/error feedback.
 
-### More examples
+## Features
 
-| Startup Toast | Toast stack | Progress bar |
-| --- | --- | --- |
-| ![Startup Toast](assets/startup.gif) | ![Multiple Toasts](assets/burst.gif) | ![Progress bar Toasts](assets/progress.gif) |
+- Info, success, warning, error, and neutral Toast kinds
+- Overlay placement: corners or centered at the top/bottom
+- Timed, persistent, and progress-indicated Toast lifetimes
+- Stable IDs for replacing long-running status Toasts
+- Queueing with `+N more`, priority, overflow policies, and duplicate coalescing
+- Keyboard actions like `[u] undo`
+- Icons, ASCII/no-color/no-animation compatibility modes
+- Renderer presets, custom themes, and full custom rendering
 
-These GIFs were created with [VHS](https://github.com/charmbracelet/vhs).
-
-## Run the examples
+## Install
 
 ```sh
-go run ./examples/basic
-go run ./examples/ergonomics
-go run ./examples/interactive
+go get github.com/kevin-rieck/go-bubble-toast
 ```
 
-The basic example shows a minimal Toast integration. The ergonomics example shows
-status replacement, keyboard Dismissal, action Toasts, accessible icons,
-compatibility modes, priority, queue indicators, and duplicate coalescing. The
-interactive example walks through the current feature set with keyboard controls.
-
-## Basic usage
+## Quick start
 
 ```go
 type model struct {
@@ -49,166 +45,61 @@ func (m model) View() string {
 }
 ```
 
-Small apps can also push directly and query Toast feedback by Toast ID:
+## Common patterns
 
-```go
-m := toast.New()
-m, id, cmd := m.Push(toast.Success("saved"))
-_, _ = id, cmd
-
-if m.Has(string(id)) {
-    t, _ := m.Get(string(id))
-    _ = t.Message
-}
-```
-
-## Updating a long-running status Toast
-
-Use a stable Toast ID when a status may change over time. `Replace` reuses the
-same Toast ID, so the Toast Stack or queue keeps one entry for that status.
+Replace a long-running status Toast by ID:
 
 ```go
 const syncStatus = "sync-status"
 
 cmd := toast.Replace(syncStatus, toast.Info("syncing", toast.WithPersistent()))
-
-// Later, when the work finishes:
 cmd = toast.Replace(syncStatus, toast.Success("synced"))
 ```
 
-Direct model updates use the same replacement behavior:
-
-```go
-m, cmd = m.Replace(syncStatus, toast.Error("sync failed"))
-```
-
-## Toast Kind icons
-
-Enable Toast Kind icons when color alone should not communicate Toast intent:
-
-```go
-m := toast.New(toast.WithKindIcons())
-```
-
-Built-in icons are available for info, success, warning, and error Toasts. Apps
-can override icons or disable them globally for terminals and fonts where icons
-are not appropriate:
+Queue overflow, priority, and duplicate coalescing:
 
 ```go
 m := toast.New(
-    toast.WithKindIcons(),
-    toast.WithIcon(toast.KindSuccess, "OK"),
-)
-
-// Or disable icons globally when terminal/font support is unsuitable.
-m := toast.New(toast.WithoutIcons())
-```
-
-Icons are added to Toasts rendered from title/message fields. `WithContent`
-remains pre-rendered content and is not modified.
-
-## Compatibility rendering
-
-For constrained terminals, enable compatibility modes for built-in Toast
-presentation:
-
-```go
-m := toast.New(
-    toast.WithASCIIOnly(), // ASCII borders and built-in icons
-    toast.WithNoColor(),   // no ANSI color sequences from built-in styles
+    toast.WithMaxVisible(2),
+    toast.WithKindPriority(toast.KindError, 10),
+    toast.WithDuplicateCoalescing(),
 )
 ```
 
-Host-provided icon overrides and custom renderers remain under the host app's
-control. Apps can also disable animated built-in affordances, such as Toast
-Lifetime progress indicators:
+Action Toasts:
 
 ```go
-m := toast.New(toast.WithNoAnimation())
-```
-
-When progress is enabled globally, individual Toasts can opt out:
-
-```go
-m, _, _ = m.Push(toast.Info("ready", toast.WithoutProgress()))
-```
-
-## Renderer presets
-
-Built-in renderer presets provide common Toast presentations without replacing
-the custom renderer escape hatch:
-
-```go
-m := toast.New(toast.WithRendererPreset(toast.PresetCompact))
-```
-
-Use `PresetCompact` for dense bordered Toasts, `PresetMinimal` for unboxed Toast
-Content, and `PresetIcon` when Toast Kind should be led by an icon. A custom
-renderer configured with `WithRenderer` still defines the full Toast
-presentation and takes precedence over presets.
-
-## Queue behavior
-
-When the visible Toast Stack is full, Bubble Toast queues overflow Toasts. The
-default full-queue behavior preserves previous releases by dropping the oldest
-queued Toast when a new Toast arrives. Apps can instead drop the newest incoming
-Toast:
-
-```go
-m := toast.New(toast.WithQueueOverflowPolicy(toast.DropNewestToast))
-```
-
-Toasts can also opt into priority. Priority is `0` by default, preserving FIFO
-behavior. Higher-priority Toasts can become visible ahead of lower-priority
-Toasts and are preferred when the queue is under pressure:
-
-```go
-m := toast.New(toast.WithKindPriority(toast.KindError, 10))
-m, _, _ = m.Push(toast.Error("sync failed"))
-m, _, _ = m.Push(toast.Warning("retrying", toast.WithPriority(5)))
-```
-
-Matching Toast ID updates still replace the existing visible or queued Toast and
-do not consume queue capacity.
-
-Apps that emit repeated generated-ID Toasts can opt into duplicate coalescing.
-When enabled, generated-ID Toasts with the same Toast Kind and message merge into
-one visible or queued Toast and render an occurrence count:
-
-```go
-m := toast.New(toast.WithDuplicateCoalescing())
-```
-
-Explicit Toast IDs remain distinct so host apps keep control over configured
-Toast identity.
-
-## Keyboard action Toasts
-
-Toasts can declare keyboard actions with user-visible hints. Matching key
-messages routed through the Toast model run the action command and dismiss the
-Toast:
-
-```go
-cmd := toast.Show(toast.NewToast(
+cmd := toast.Show(toast.Warning(
     "file deleted",
     toast.WithAction("u", "undo", func() tea.Msg { return undoDeleteMsg{} }),
 ))
 ```
 
-Apps without Toast actions continue to ignore key messages.
-
-Bubble Toast also renders a `+N more` indicator for queued Toasts. Apps can
-customize or disable that stack-level affordance:
+Compatibility and custom rendering:
 
 ```go
 m := toast.New(
-    toast.WithQueueIndicator(func(ctx toast.QueueIndicatorContext) string {
-        return fmt.Sprintf("waiting: %d", ctx.Count)
-    }),
+    toast.WithASCIIOnly(),
+    toast.WithNoColor(),
+    toast.WithRendererPreset(toast.PresetIcon),
 )
-
-m = toast.New(toast.WithoutQueueIndicator())
 ```
+
+## Examples
+
+```sh
+go run ./examples/basic
+go run ./examples/ergonomics
+go run ./examples/interactive
+```
+
+The GIFs are recorded with [VHS](https://github.com/charmbracelet/vhs). The recording-only demo lives in `examples/gifdemo`.
+
+## More demos
+
+| Startup Toast | Toast stack | Progress bar |
+| --- | --- | --- |
+| ![Startup Toast](assets/startup.gif) | ![Multiple Toasts](assets/burst.gif) | ![Progress bar Toasts](assets/progress.gif) |
 
 ## Release
 

@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/kevin-rieck/go-bubble-toast"
+	"github.com/kevin-rieck/go-bubble-toast/examples/internal/layout"
 )
 
 const statusID = "interactive-status"
@@ -108,7 +109,7 @@ func (m model) View() string {
 		"disabled affordances, compatibility modes, renderer presets, custom renderers, themes, placement, margins, wrapping, and truncation." +
 		strings.Repeat("\n", 10)
 
-	return m.toasts.Overlay(base)
+	return layout.Columns(base, m.toasts.View())
 }
 
 type stage struct {

@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/kevin-rieck/go-bubble-toast"
+	"github.com/kevin-rieck/go-bubble-toast/examples/internal/layout"
 )
 
 type model struct {
@@ -65,7 +66,7 @@ func (m model) View() string {
 			"• visible stack limit, queued overflow, queue draining",
 			"• persistent Toasts and custom renderers",
 		}, "\n") + strings.Repeat("\n", 12)
-	return m.toasts.Overlay(base)
+	return layout.Columns(base, m.toasts.View())
 }
 
 func (m *model) configureStage() {
