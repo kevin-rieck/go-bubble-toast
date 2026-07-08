@@ -218,7 +218,7 @@ func (m Model) renderToast(e entry, index, total int) string {
 
 	body = wrap(body, innerWidth)
 
-	if m.progressModel != nil && !t.Persistent {
+	if m.progressModel != nil && !t.Persistent && !t.ProgressDisabled {
 		percent := m.progressFraction(e)
 
 		p := *m.progressModel

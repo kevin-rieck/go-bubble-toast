@@ -124,6 +124,12 @@ Lifetime progress indicators:
 m := toast.New(toast.WithNoAnimation())
 ```
 
+When progress is enabled globally, individual Toasts can opt out:
+
+```go
+m, _, _ = m.Push(toast.Info("ready", toast.WithoutProgress()))
+```
+
 ## Renderer presets
 
 Built-in renderer presets provide common Toast presentations without replacing

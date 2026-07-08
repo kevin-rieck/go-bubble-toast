@@ -436,6 +436,23 @@ func TestKindIconsDoNotChangePreRenderedContent(t *testing.T) {
 	}
 }
 
+func TestToastCanDisableLifetimeProgressRendering(t *testing.T) {
+	model := toast.New(
+		toast.WithProgress(true),
+		toast.WithRendererPreset(toast.PresetMinimal),
+		toast.WithWidth(30),
+	)
+	model, _, _ = model.Push(toast.NewToast("quiet lifetime", toast.WithoutProgress()))
+
+	view := model.View()
+	if strings.Contains(view, "─") {
+		t.Fatalf("Toast-level progress opt-out should suppress progress output, got %q", view)
+	}
+	if !strings.Contains(view, "quiet lifetime") {
+		t.Fatalf("Toast-level progress opt-out should preserve Toast Content, got %q", view)
+	}
+}
+
 func TestNoAnimationModeDisablesLifetimeProgressRendering(t *testing.T) {
 	model := toast.New(
 		toast.WithProgress(true),

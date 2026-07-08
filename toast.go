@@ -74,16 +74,17 @@ type ToastAction struct {
 }
 
 type Toast struct {
-	ID          ID
-	Kind        Kind
-	Title       string
-	Message     string
-	Content     string
-	Actions     []ToastAction
-	Priority    int
-	Occurrences int
-	Duration    time.Duration
-	Persistent  bool
+	ID               ID
+	Kind             Kind
+	Title            string
+	Message          string
+	Content          string
+	Actions          []ToastAction
+	Priority         int
+	Occurrences      int
+	Duration         time.Duration
+	Persistent       bool
+	ProgressDisabled bool
 }
 
 type ShowMsg struct{ Toast Toast }
@@ -773,6 +774,9 @@ func WithPriority(priority int) ToastOption    { return func(t *Toast) { t.Prior
 func WithDuration(d time.Duration) ToastOption { return func(t *Toast) { t.Duration = d } }
 func WithPersistent() ToastOption              { return func(t *Toast) { t.Persistent = true } }
 func WithContent(content string) ToastOption   { return func(t *Toast) { t.Content = content } }
+
+// WithoutProgress disables Toast Lifetime progress rendering for this Toast.
+func WithoutProgress() ToastOption { return func(t *Toast) { t.ProgressDisabled = true } }
 
 // WithAction adds a keyboard action hint and command to a Toast.
 func WithAction(key, label string, cmd tea.Cmd) ToastOption {
