@@ -54,7 +54,8 @@ m := toast.New()
 m, id, cmd := m.Push(toast.Success("saved"))
 _, _ = id, cmd
 
-if t, ok := m.Get(string(id)); ok {
+if m.Has(string(id)) {
+    t, _ := m.Get(string(id))
     _ = t.Message
 }
 ```

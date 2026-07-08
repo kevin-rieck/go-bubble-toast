@@ -60,6 +60,19 @@ func TestAppCanCheckVisibleAndQueuedToastsByID(t *testing.T) {
 	}
 }
 
+func TestAppCanCheckAnyToastByID(t *testing.T) {
+	model := toast.New(toast.WithMaxVisible(1))
+	model, _, _ = model.Push(toast.NewToast("visible", toast.WithID("visible")))
+	model, _, _ = model.Push(toast.NewToast("queued", toast.WithID("queued")))
+
+	if !model.Has("visible") || !model.Has("queued") {
+		t.Fatalf("Has should match visible and queued Toast IDs")
+	}
+	if model.Has("missing") {
+		t.Fatal("Has should not match missing Toast IDs")
+	}
+}
+
 func TestToastIDQueriesDoNotFindMissingOrDismissedToasts(t *testing.T) {
 	model := toast.New(toast.WithMaxVisible(1))
 	model, _, _ = model.Push(toast.NewToast("visible", toast.WithID("visible")))

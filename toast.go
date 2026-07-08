@@ -411,6 +411,12 @@ func (m Model) Get(id string) (Toast, bool) {
 	return m.QueuedByID(id)
 }
 
+// Has reports whether the given Toast ID is currently visible or queued.
+func (m Model) Has(id string) bool {
+	_, ok := m.Get(id)
+	return ok
+}
+
 // VisibleByID returns the visible Toast with the given Toast ID, if present.
 func (m Model) VisibleByID(id string) (Toast, bool) {
 	return findToast(m.visible, ID(id))
