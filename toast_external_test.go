@@ -47,6 +47,19 @@ func TestAppCanQueryQueuedToastByID(t *testing.T) {
 	}
 }
 
+func TestAppCanCheckVisibleAndQueuedToastsByID(t *testing.T) {
+	model := toast.New(toast.WithMaxVisible(1))
+	model, _, _ = model.Push(toast.NewToast("visible", toast.WithID("visible")))
+	model, _, _ = model.Push(toast.NewToast("queued", toast.WithID("queued")))
+
+	if !model.HasVisible("visible") || model.HasVisible("queued") {
+		t.Fatalf("HasVisible should only match visible Toast IDs")
+	}
+	if !model.HasQueued("queued") || model.HasQueued("visible") {
+		t.Fatalf("HasQueued should only match queued Toast IDs")
+	}
+}
+
 func TestToastIDQueriesDoNotFindMissingOrDismissedToasts(t *testing.T) {
 	model := toast.New(toast.WithMaxVisible(1))
 	model, _, _ = model.Push(toast.NewToast("visible", toast.WithID("visible")))
@@ -64,6 +77,24 @@ func TestToastIDQueriesDoNotFindMissingOrDismissedToasts(t *testing.T) {
 
 	if model.IsVisible("visible") || model.IsQueued("queued") {
 		t.Fatal("dismissed Toast IDs should not be reported visible or queued")
+	}
+}
+
+func TestAppCanQueryAnyToastByID(t *testing.T) {
+	model := toast.New(toast.WithMaxVisible(1))
+	model, _, _ = model.Push(toast.NewToast("visible", toast.WithID("visible")))
+	model, _, _ = model.Push(toast.NewToast("queued", toast.WithID("queued")))
+
+	visible, ok := model.Get("visible")
+	if !ok || visible.ID != "visible" || visible.Message != "visible" {
+		t.Fatalf("Get should find visible Toasts by Toast ID, got %#v ok=%v", visible, ok)
+	}
+	queued, ok := model.Get("queued")
+	if !ok || queued.ID != "queued" || queued.Message != "queued" {
+		t.Fatalf("Get should find queued Toasts by Toast ID, got %#v ok=%v", queued, ok)
+	}
+	if _, ok := model.Get("missing"); ok {
+		t.Fatal("Get should not find missing Toast IDs")
 	}
 }
 

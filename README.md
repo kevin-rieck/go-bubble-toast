@@ -47,12 +47,16 @@ func (m model) View() string {
 }
 ```
 
-Small apps can also push directly:
+Small apps can also push directly and query Toast feedback by Toast ID:
 
 ```go
 m := toast.New()
 m, id, cmd := m.Push(toast.Success("saved"))
 _, _ = id, cmd
+
+if t, ok := m.Get(string(id)); ok {
+    _ = t.Message
+}
 ```
 
 ## Updating a long-running status Toast

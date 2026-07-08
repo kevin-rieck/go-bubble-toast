@@ -401,27 +401,41 @@ func (m Model) Queued() []Toast {
 	return out
 }
 
+// Get returns the visible or queued Toast with the given Toast ID, if present.
+func (m Model) Get(id string) (Toast, bool) {
+	if t, ok := m.VisibleByID(id); ok {
+		return t, true
+	}
+	return m.QueuedByID(id)
+}
+
 // VisibleByID returns the visible Toast with the given Toast ID, if present.
 func (m Model) VisibleByID(id string) (Toast, bool) {
 	return findToast(m.visible, ID(id))
 }
 
-// IsVisible reports whether the given Toast ID is currently visible.
-func (m Model) IsVisible(id string) bool {
+// HasVisible reports whether the given Toast ID is currently visible.
+func (m Model) HasVisible(id string) bool {
 	_, ok := m.VisibleByID(id)
 	return ok
 }
+
+// IsVisible reports whether the given Toast ID is currently visible.
+func (m Model) IsVisible(id string) bool { return m.HasVisible(id) }
 
 // QueuedByID returns the queued Toast with the given Toast ID, if present.
 func (m Model) QueuedByID(id string) (Toast, bool) {
 	return findToast(m.queued, ID(id))
 }
 
-// IsQueued reports whether the given Toast ID is currently queued.
-func (m Model) IsQueued(id string) bool {
+// HasQueued reports whether the given Toast ID is currently queued.
+func (m Model) HasQueued(id string) bool {
 	_, ok := m.QueuedByID(id)
 	return ok
 }
+
+// IsQueued reports whether the given Toast ID is currently queued.
+func (m Model) IsQueued(id string) bool { return m.HasQueued(id) }
 
 func (m Model) Len() int { return len(m.visible) + len(m.queued) }
 
